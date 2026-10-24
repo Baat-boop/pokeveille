@@ -94,7 +94,7 @@ test('message de bienvenue Discord envoyé une seule fois', async () => {
   assert.equal((await t.run()).welcome.length, 0);
 });
 
-test('changement de prix seul : pas de nouvelle alerte', async () => {
+test('petite baisse de prix (moins de 10 %) : pas de nouvelle alerte', async () => {
   const t = setup([ETB_FR]);
   t.catalog = [product(1, 'ETB Chaos Ascendant ME04 FR', true, '69.90')];
   await t.run();
@@ -244,4 +244,77 @@ test('recherche avec notify:false : rien n’est envoyé', async () => {
   assert.equal(r.messages.length, 0);
   t.advance(15);
   assert.equal((await t.run()).alerts.length, 0, 'et pas rejoué au passage suivant');
+});
+
+test('baisse de prix d’au moins 10 % : une alerte, une seule fois, avec l’ancien prix', async () => {
+  const t = setup([ETB_FR]);
+  t.catalog = [product(1, 'ETB Chaos Ascendant ME04 FR', true, '69.90')];
+  await t.run();
+  t.advance(15);
+  t.catalog = [product(1, 'ETB Chaos Ascendant ME04 FR', true, '59.90')];
+  let r = await t.run();
+  assert.equal(r.alerts.length, 1);
+  assert.equal(r.alerts[0].kind, 'price');
+  assert.equal(r.embeds[0].author.name, '📉 Baisse de prix');
+  assert.match(r.embeds[0].description, /59,90 € au lieu de 69,90 €/);
+  t.advance(15);
+  assert.equal((await t.run()).messages.length, 0, 'prix inchangé → pas de répétition');
+  t.advance(15);
+  t.catalog = [product(1, 'ETB Chaos Ascendant ME04 FR', true, '69.90')];
+  assert.equal((await t.run()).messages.length, 0, 'hausse → rien');
+  t.advance(15);
+  t.catalog = [product(1, 'ETB Chaos Ascendant ME04 FR', true, '57.90')];
+  assert.equal((await t.run()).messages.length, 0, 'moins de 10 % sous le dernier prix annoncé (59,90 €) → rien');
+});
+
+test('baisse de prix désactivable par recherche', async () => {
+  const t = setup([{ ...ETB_FR, notifyPriceDrop: false }]);
+  t.catalog = [product(1, 'ETB Chaos Ascendant ME04 FR', true, '69.90')];
+  await t.run();
+  t.advance(15);
+  t.catalog = [product(1, 'ETB Chaos Ascendant ME04 FR', true, '49.90')];
+  assert.equal((await t.run()).messages.length, 0);
+});
+
+test('boutique injoignable depuis 3 h : un seul avertissement, puis un message quand elle répond', async () => {
+  const t = setup([ETB_FR]);
+  t.catalog = [product(1, 'ETB Chaos Ascendant ME04 FR', true)];
+  await t.run();
+  t.failing = true;
+  const warnings = [];
+  for (let i = 0; i < 16; i++) { t.advance(15); warnings.push(...(await t.run()).embeds.filter(e => e.title.startsWith('⚠️'))); }
+  assert.equal(warnings.length, 1, 'un seul avertissement pour 4 h de panne');
+  assert.match(warnings[0].title, /Boutique Test ne répond plus depuis 3 h/);
+  assert.match(warnings[0].description, /HTTP 503/);
+  t.failing = false;
+  t.advance(15);
+  const r = await t.run();
+  assert.ok(r.welcome.some(e => e.embeds[0].title === '✅ Boutique Test répond à nouveau'));
+  t.advance(15);
+  assert.ok(!(await t.run()).welcome.some(e => /répond à nouveau/.test(e.embeds[0].title)), 'pas de répétition');
+});
+
+test('panne courte (moins de 3 h) : aucun avertissement', async () => {
+  const t = setup([ETB_FR]);
+  t.catalog = [product(1, 'ETB Chaos Ascendant ME04 FR', true)];
+  await t.run();
+  t.failing = true;
+  for (let i = 0; i < 8; i++) { t.advance(15); assert.equal((await t.run()).messages.length, 0); }
+  t.failing = false;
+  t.advance(15);
+  assert.equal((await t.run()).welcome.length, 0);
+});
+
+test('prix abusif signalé dans l’alerte Discord', async () => {
+  const t = setup([ETB_FR]);
+  fs.copyFileSync(new URL('../config/prices.json', import.meta.url), path.join(t.root, 'config/prices.json'));
+  t.catalog = [];
+  await t.run();
+  t.advance(15);
+  t.catalog = [product(1, 'ETB Nuit Noire ME05 FR', true, '89.90'), product(2, 'ETB Chaos Ascendant ME04 FR', true, '59.90')];
+  const r = await t.run();
+  const byTitle = Object.fromEntries(r.embeds.map(e => [e.title, e.description]));
+  assert.match(byTitle['ETB Nuit Noire ME05 FR'], /61 % au-dessus du prix de référence\*\* \(ETB : 55,99 €\)/);
+  assert.doesNotMatch(byTitle['ETB Chaos Ascendant ME04 FR'], /au-dessus/);
+  assert.equal(r.offers.find(o => o.title.startsWith('ETB Nuit')).overpriced, true);
 });

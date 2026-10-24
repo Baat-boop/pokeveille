@@ -48,7 +48,7 @@ function ago(iso) {
   return `il y a ${Math.round(h / 24)} j`;
 }
 const when = iso => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—');
-const KIND_LABEL = { restock: '🟢 Retour en stock', new: '🆕 Nouvelle offre', deal: '💡 Bon plan', listed: '📣 Produit à venir' };
+const KIND_LABEL = { restock: '🟢 Retour en stock', new: '🆕 Nouvelle offre', price: '📉 Baisse de prix', deal: '💡 Bon plan', listed: '📣 Produit à venir' };
 const SEALED = ['etb', 'display', 'coffret', 'booster'];
 const day = iso => {
   const [y, m, d] = iso.split('-');
@@ -185,6 +185,7 @@ function offerCard(o) {
   const notes = [];
   if (o.stale) notes.push(`<span class="warn">⚠ Boutique injoignable au dernier passage : information du ${when(o.checkedAt)}</span>`);
   if (o.removed) notes.push(`<span class="warn">Retiré du catalogue (dernier statut connu : ${esc(STATUS[o.lastKnownStatus] ?? '—')})</span>`);
+  if (o.overpriced) notes.push(`<span class="warn">⚠ ${Math.round((o.price / o.ref.price - 1) * 100)} % au-dessus du prix de référence (${esc(o.ref.label)} : ${euro(o.ref.price)})</span>`);
   return `<article class="card">
     ${o.image ? `<img loading="lazy" src="${esc(o.image)}" alt="">` : '<div class="noimg"></div>'}
     <div>
@@ -293,7 +294,7 @@ function initStores() {
 }
 
 // ---------- searches editor ----------
-const NEW_SEARCH = () => ({ id: '', name: 'Nouvelle recherche', enabled: true, notify: true, keywords: [], excludeKeywords: [], types: [...DEFAULT_TYPES], languages: ['fr'], allowUnknownLanguage: true, maxPrice: null, retailers: [], channels: ['online', 'deal'], includePreorder: true, includeDeals: true, notifyListed: true, promoOnly: false });
+const NEW_SEARCH = () => ({ id: '', name: 'Nouvelle recherche', enabled: true, notify: true, keywords: [], excludeKeywords: [], types: [...DEFAULT_TYPES], languages: ['fr'], allowUnknownLanguage: true, maxPrice: null, retailers: [], channels: ['online', 'deal'], includePreorder: true, includeDeals: true, notifyListed: true, notifyPriceDrop: true, promoOnly: false });
 const slug = s => norm(s).replace(/\s+/g, '-').slice(0, 30) || 'recherche';
 const isDirty = () => JSON.stringify(S.searches) !== JSON.stringify(S.configSearches);
 
@@ -345,6 +346,7 @@ function openEditor(index) {
   form.promoOnly.checked = !!s.promoOnly;
   form.notify.checked = s.notify !== false;
   form.notifyListed.checked = s.notifyListed !== false;
+  form.notifyPriceDrop.checked = s.notifyPriceDrop !== false;
   form.enabled.checked = s.enabled !== false;
   const dlg = $('#edit-dlg');
   dlg.onclose = () => {
@@ -371,6 +373,7 @@ function openEditor(index) {
       promoOnly: form.promoOnly.checked,
       notify: form.notify.checked,
       notifyListed: form.notifyListed.checked,
+      notifyPriceDrop: form.notifyPriceDrop.checked,
       enabled: form.enabled.checked,
     };
     if (!out.id) {

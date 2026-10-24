@@ -16,7 +16,17 @@
     "baseUrl": "https://vcollect.fr",
     "pokemonOnly": true,
     "defaultLanguage": null,
-    "note": "Boutique Pokémon, expédition depuis la France. Vend aussi du japonais / chinois (langue indiquée dans le titre).",
+    "note": "Désactivée le 24/10/2026 : ses conditions d'utilisation (article 12) interdisent l'exploration et l'aspiration automatiques (« spider », « scrape »).",
+    "enabled": false
+  },
+  {
+    "id": "leshiny",
+    "name": "LeShiny (Hérault)",
+    "type": "shopify",
+    "baseUrl": "https://leshiny.fr",
+    "pokemonOnly": false,
+    "defaultLanguage": null,
+    "note": "Boutique de scellé TCG (Pokémon FR/JP), société française E-COMMEXPERT. Conditions vérifiées le 24/10/2026 : pas d'interdiction de l'accès automatisé.",
     "enabled": true
   },
   {

@@ -54,4 +54,6 @@ jobs:
       - name: Garder la planification active
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/check.yml/enable" || true
+        run: |
+          gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/check.yml/enable" || true
+          gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/watchdog.yml/enable" || true

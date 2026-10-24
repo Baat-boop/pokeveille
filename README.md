@@ -37,16 +37,22 @@ Ne partagez jamais cette URL : quiconque la possède peut écrire dans votre sal
 | Produit en rupture → disponible (ou précommande) | 🟢 Oui, « Retour en stock » |
 | Nouveau produit déjà disponible qui correspond | 🆕 Oui, « Nouvelle offre » |
 | Nouveau bon plan Dealabs qui correspond | 💡 Oui, « Bon plan signalé » |
-| Offre inchangée, ou seul le prix change | Non |
+| Produit référencé mais pas encore commandable | 📣 Oui, puis alerte dès qu'il devient commandable |
+| Prix en baisse d'au moins 10 % depuis la dernière alerte | 📉 Oui, « Baisse de prix » (désactivable par recherche) |
+| Offre inchangée, ou petite variation de prix | Non |
 | Rupture puis retour en moins d'une heure | Retenue, envoyée si toujours dispo après 1 h |
-| Boutique injoignable | Non (dernier statut gardé, marqué « non actualisé ») |
+| Boutique injoignable | Pas d'alerte de stock (dernier statut gardé, marqué « non actualisé ») ; ⚠️ un avertissement si ça dure 3 h, ✅ un message quand elle répond |
+| Plus aucune vérification depuis 2 h (panne, GitHub qui saute des passages) | ⚠️ Un avertissement (workflow « Surveillance » séparé, toutes les heures), ✅ un message à la reprise |
+
+Prix de référence (`config/prices.json`) : pour les produits français standard du bloc Méga-Évolution et les sorties du calendrier, les offres à 30 % ou plus au-dessus du prix le plus cité par les sites spécialisés sont signalées (site et Discord). Il n'existe pas de prix conseillé officiel en euros.
 | Nouvelle recherche / critères modifiés / nouvelle boutique | Un seul récapitulatif, puis alertes normales |
 
 ## Sources et limites (honnêtement)
 
 | Source | Ce qui est vérifié |
 |---|---|
-| Pokémania, VCOLLECT, Sneyzen Corp, Hikaru Distribution | Stock et prix réels via leur catalogue public (`/products.json`), robots.txt respecté, 2 s entre requêtes |
+| Pokémania, Sneyzen Corp, Hikaru Distribution, LeShiny | Stock et prix réels via leur catalogue public (`/products.json`), robots.txt et conditions d'utilisation respectés, 2 s entre requêtes |
+| VCOLLECT, PokeStation | **Exclues** : leurs conditions d'utilisation interdisent l'exploration automatique |
 | Dealabs (flux RSS Pokémon) | Bons plans postés par la communauté : **pas** de stock vérifié |
 | Magasins physiques (OpenStreetMap + GTFS Ametis) | Découverte uniquement : **pas** de stock |
 

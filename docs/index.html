@@ -140,6 +140,7 @@
       <h2>Ce que l'application couvre (et ne couvre pas)</h2>
       <ul class="small">
         <li><b>Stock réel vérifié</b> : boutiques en ligne qui publient leur catalogue public (Shopify, WooCommerce) et livrent en France. Leur disponibilité est relevée à chaque passage.</li>
+        <li><b>Prix de référence</b> : pour les produits français du bloc Méga-Évolution (booster, tripack, bundle, ETB, display) et les sorties du calendrier, un avertissement s'affiche quand le prix dépasse d'au moins 30 % le prix le plus cité par les sites spécialisés. Il n'existe pas de prix conseillé officiel en euros.</li>
         <li><b>Bons plans Dealabs</b> : offres signalées par la communauté (y compris Fnac, Leclerc, Carrefour, Amazon). Utile pour les promotions, mais <b>le stock n'est pas vérifié</b>.</li>
         <li><b>Magasins physiques d'Amiens</b> : découverts via OpenStreetMap et le réseau Ametis. Adresse, distance et arrêts de bus sont affichés, mais <b>le stock en magasin n'est pas vérifiable</b>.</li>
         <li><b>Non couverts</b> : les sites des grandes enseignes (Fnac, Cultura, Leclerc, Carrefour, Auchan, King Jouet, Amazon…) sont protégés contre les robots ou interdisent l'extraction automatique. L'application ne contourne pas ces protections.</li>
@@ -174,6 +175,7 @@
       <label><input type="checkbox" name="promoOnly"> Promotions uniquement</label>
       <label><input type="checkbox" name="notify"> Alertes Discord</label>
       <label><input type="checkbox" name="notifyListed"> Prévenir dès qu'un produit est référencé (avant sa mise en vente)</label>
+      <label><input type="checkbox" name="notifyPriceDrop"> Prévenir des baisses de prix (au moins 10 %)</label>
       <label><input type="checkbox" name="enabled"> Recherche active</label>
     </div>
     <div class="row" style="margin-top:14px;justify-content:space-between">

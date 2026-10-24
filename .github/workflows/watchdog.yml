@@ -1,0 +1,53 @@
+name: Surveillance des vérifications
+
+on:
+  schedule:
+    # Toutes les heures : prévient sur Discord si les vérifications de stock se sont arrêtées.
+    - cron: '41 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: watchdog
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Lire l'état (branches data et watchdog)
+        run: |
+          git fetch --depth=1 origin data && git show FETCH_HEAD:status.json > /tmp/status.json || echo '{}' > /tmp/status.json
+          mkdir -p /tmp/wd
+          if git ls-remote --exit-code --heads origin watchdog >/dev/null; then
+            git fetch --depth=1 origin watchdog && git show FETCH_HEAD:watchdog.json > /tmp/wd/watchdog.json || true
+          fi
+
+      - name: Vérifier que les passages continuent
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+          REPO_URL: https://github.com/${{ github.repository }}
+        run: node src/watchdog.js --status /tmp/status.json --state /tmp/wd/watchdog.json
+
+      - name: Enregistrer l'état (branche watchdog)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd /tmp/wd
+          [ -f watchdog.json ] || exit 0
+          git init -q -b watchdog
+          git config user.name "pokeveille-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Surveillance du $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" watchdog

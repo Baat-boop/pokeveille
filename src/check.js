@@ -9,8 +9,10 @@ import { fetchDealabs } from './sources/dealabs.js';
 import { mergeOffers, computeAlerts, markSent } from './alerts.js';
 import { sendAlerts, postWebhook, digestEmbed } from './notify/discord.js';
 import { matchOffer } from '../docs/shared/match.js';
+import { referencePrice } from './pricing.js';
 
 const MAX_ALERTS_PER_RUN = 40;
+export const SOURCE_DOWN_ALERT_MS = 3 * 3600 * 1000; // warn on Discord when a shop has been unreachable for 3 hours
 const HISTORY_SIZE = 300;
 const FETCHERS = { shopify: fetchShopify, woocommerce: fetchWooCommerce, dealabs: fetchDealabs };
 
@@ -55,9 +57,17 @@ export async function runCheck({ dataDir, root = process.cwd(), only = null, web
   const keptPrev = Object.fromEntries(Object.entries(prevOffers).filter(([, o]) => known.has(o.sourceId)));
 
   const offers = mergeOffers(keptPrev, runs, now);
+  // Reference price: flags resale far above the usual price.
+  const ctx = { prices: readJson(path.join(root, 'config/prices.json'), null), releases: readJson(path.join(root, 'config/releases.json'), null) };
+  const ratio = ctx.prices?.overpricedRatio ?? 1.3;
+  for (const o of Object.values(offers)) {
+    const ref = referencePrice(o, ctx);
+    if (ref) { o.ref = ref; o.overpriced = o.price != null && o.price >= ref.price * ratio; } else { delete o.ref; delete o.overpriced; }
+  }
   const { alerts, digests, state: next } = computeAlerts({ prevOffers: keptPrev, offers, runs, searches, state, now });
   for (const s of sourceStatus) {
-    next.sources[s.id] = { ...(next.sources[s.id] ?? {}), ...(s.ok ? { lastOkAt: new Date(now).toISOString() } : {}), lastError: s.ok ? null : s.error };
+    const cur = next.sources[s.id] ?? {};
+    next.sources[s.id] = { ...cur, ...(s.ok ? { lastOkAt: new Date(now).toISOString(), failingSince: null } : { failingSince: cur.failingSince ?? new Date(now).toISOString() }), lastError: s.ok ? null : s.error };
   }
 
   const searchesById = Object.fromEntries(searches.map(s => [s.id, s]));
@@ -72,6 +82,18 @@ export async function runCheck({ dataDir, root = process.cwd(), only = null, web
       const avail = Object.values(offers).filter(o => o.status === 'disponible' || o.status === 'precommande');
       const lines = searches.filter(s => s.enabled !== false).map(s => `• **${s.name}** : ${avail.filter(o => matchOffer(o, s)).length} offre(s) disponible(s) en ce moment`);
       next.webhookWelcomed = await postWebhook(webhookUrl, { embeds: [{ title: '✅ PokéVeille est connecté à Discord', description: `Vous recevrez ici les retours en stock et les nouvelles offres de vos recherches.\n\n${lines.join('\n')}${siteUrl ? `\n\n[Voir le tableau de bord](${siteUrl})` : ''}`, color: 0x2ecc71 }] });
+    }
+    // Shop health: one warning when a shop stays unreachable, one message when it answers again.
+    for (const s of sourceStatus) {
+      const st = next.sources[s.id];
+      if (!s.ok && !st.downNotifiedAt && now - Date.parse(st.failingSince) >= SOURCE_DOWN_ALERT_MS) {
+        const h = Math.round((now - Date.parse(st.failingSince)) / 3600000);
+        const ok = await postWebhook(webhookUrl, { embeds: [{ title: `⚠️ ${s.name} ne répond plus depuis ${h} h`, description: `Erreur : ${s.error}\n\nSes offres restent affichées avec leur dernier état connu, mais aucune alerte ne peut être envoyée pour cette boutique tant qu'elle ne répond pas. Rien à faire de votre côté : les vérifications continuent et vous serez prévenu dès qu'elle répondra à nouveau.`, color: 0xe74c3c }] });
+        if (ok) st.downNotifiedAt = new Date(now).toISOString();
+      } else if (s.ok && st.downNotifiedAt) {
+        const ok = await postWebhook(webhookUrl, { embeds: [{ title: `✅ ${s.name} répond à nouveau`, description: 'Les alertes de cette boutique reprennent normalement.', color: 0x2ecc71 }] });
+        if (ok) st.downNotifiedAt = null;
+      }
     }
     for (const [sid, list] of Object.entries(digests)) {
       const s = searchesById[sid];

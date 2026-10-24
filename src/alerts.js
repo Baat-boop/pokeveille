@@ -3,6 +3,7 @@ import { matchOffer, isActionable, searchHash } from '../docs/shared/match.js';
 
 export const RESTOCK_COOLDOWN_MS = 60 * 60 * 1000;          // at most one restock alert per hour per offer and search
 export const REMOVED_RETENTION_MS = 30 * 24 * 3600 * 1000;  // forget products gone from a catalogue for 30 days
+export const PRICE_DROP_RATIO = 0.9;                        // price alert when at least 10 % below the last notified price
 
 /**
  * @param prevOffers  {key: offer} from the previous run
@@ -53,12 +54,13 @@ export function mergeOffers(prevOffers, runs, now) {
   return out;
 }
 
-const KIND_RANK = { restock: 3, new: 2, deal: 1, listed: 0 };
+const KIND_RANK = { restock: 4, new: 3, price: 2, deal: 1, listed: 0 };
 
 /**
  * Decide alerts. Rules:
  *  - "restock": the offer was out of stock (or gone) and is now available / preorderable.
  *  - "new": an available offer matches the search for the first time.
+ *  - "price": an already-notified available offer is now at least 10 % cheaper than when last notified.
  *  - "deal": a new community deal (Dealabs) matches the search.
  *  - A (search, offer) pair is notified once; it is re-armed only when the offer goes out of stock again.
  *  - New searches, changed criteria and newly added sources are baselined silently (one digest instead of a flood).
@@ -93,12 +95,12 @@ export function computeAlerts({ prevOffers, offers, runs, searches, state, now }
 
   const byOffer = new Map();
   const digests = {};
-  const add = (kind, offer, searchId) => {
+  const add = (kind, offer, searchId, extra = {}) => {
     const cur = byOffer.get(offer.key);
-    if (!cur) byOffer.set(offer.key, { kind, offer, searchIds: [searchId] });
+    if (!cur) byOffer.set(offer.key, { kind, offer, searchIds: [searchId], ...extra });
     else {
       cur.searchIds.push(searchId);
-      if (KIND_RANK[kind] > KIND_RANK[cur.kind]) cur.kind = kind;
+      if (KIND_RANK[kind] > KIND_RANK[cur.kind]) Object.assign(cur, { kind, ...extra });
     }
   };
   const silentMark = (k, o, s) => {
@@ -139,6 +141,8 @@ export function computeAlerts({ prevOffers, offers, runs, searches, state, now }
       } else if (entry.armed) {
         if (now - entry.at < RESTOCK_COOLDOWN_MS) continue;
         add(entry.listedAt ? 'new' : 'restock', o, s.id);
+      } else if (s.notifyPriceDrop !== false && entry.price != null && o.price != null && o.price <= entry.price * PRICE_DROP_RATIO) {
+        add('price', o, s.id, { prevPrice: entry.price });
       }
     }
   }
@@ -149,7 +153,7 @@ export function computeAlerts({ prevOffers, offers, runs, searches, state, now }
     if (!activeIds.has(sid) || !offers[rest.join('|')]) delete next.notified[k];
   }
 
-  const order = { restock: 0, new: 1, deal: 2, listed: 3 };
+  const order = { restock: 0, new: 1, price: 2, deal: 3, listed: 4 };
   const alerts = [...byOffer.values()].sort((a, b) => order[a.kind] - order[b.kind] || (a.offer.price ?? 1e9) - (b.offer.price ?? 1e9));
   return { alerts, digests, state: next };
 }
