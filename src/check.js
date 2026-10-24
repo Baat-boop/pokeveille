@@ -8,6 +8,7 @@ import { fetchWooCommerce } from './sources/woocommerce.js';
 import { fetchDealabs } from './sources/dealabs.js';
 import { mergeOffers, computeAlerts, markSent } from './alerts.js';
 import { sendAlerts, postWebhook, digestEmbed } from './notify/discord.js';
+import { matchOffer } from '../docs/shared/match.js';
 
 const MAX_ALERTS_PER_RUN = 40;
 const HISTORY_SIZE = 300;
@@ -65,7 +66,13 @@ export async function runCheck({ dataDir, root = process.cwd(), only = null, web
   const sent = [];
   const record = a => { markSent(next, a, now); sent.push(a); };
 
+  next.webhookWelcomed = state.webhookWelcomed ?? false;
   if (webhookUrl) {
+    if (!next.webhookWelcomed) {
+      const avail = Object.values(offers).filter(o => o.status === 'disponible' || o.status === 'precommande');
+      const lines = searches.filter(s => s.enabled !== false).map(s => `• **${s.name}** : ${avail.filter(o => matchOffer(o, s)).length} offre(s) disponible(s) en ce moment`);
+      next.webhookWelcomed = await postWebhook(webhookUrl, { embeds: [{ title: '✅ PokéVeille est connecté à Discord', description: `Vous recevrez ici les retours en stock et les nouvelles offres de vos recherches.\n\n${lines.join('\n')}${siteUrl ? `\n\n[Voir le tableau de bord](${siteUrl})` : ''}`, color: 0x2ecc71 }] });
+    }
     for (const [sid, list] of Object.entries(digests)) {
       const s = searchesById[sid];
       const actionable = list.filter(o => o.status === 'disponible' || o.status === 'precommande');

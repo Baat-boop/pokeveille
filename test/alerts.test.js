@@ -38,7 +38,9 @@ function setup(searches) {
     async run() {
       received = [];
       const r = await runCheck({ root, dataDir: path.join(root, '.data'), webhookUrl: hookUrl, now, fetchers, log: () => {} });
-      return { ...r, messages: received, embeds: received.flatMap(m => m.embeds ?? []) };
+      const isWelcome = m => m.embeds?.[0]?.title?.startsWith('✅');
+      const messages = received.filter(m => !isWelcome(m));
+      return { ...r, welcome: received.filter(isWelcome), messages, embeds: messages.flatMap(m => m.embeds ?? []) };
     },
   };
 }
@@ -80,6 +82,16 @@ test('retour en stock : rupture → disponible déclenche une alerte, une seule 
     t.advance(15);
     assert.equal((await t.run()).messages.length, 0, 'offre inchangée → pas de doublon');
   }
+});
+
+test('message de bienvenue Discord envoyé une seule fois', async () => {
+  const t = setup([ETB_FR]);
+  t.catalog = [product(1, 'ETB Chaos Ascendant ME04 FR', true)];
+  const first = await t.run();
+  assert.equal(first.welcome.length, 1);
+  assert.match(first.welcome[0].embeds[0].description, /ETB FR\*\* : 1 offre/);
+  t.advance(15);
+  assert.equal((await t.run()).welcome.length, 0);
 });
 
 test('changement de prix seul : pas de nouvelle alerte', async () => {
