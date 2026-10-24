@@ -7,12 +7,20 @@
       "notify": true,
       "keywords": [],
       "excludeKeywords": [],
-      "types": ["etb", "coffret"],
-      "languages": ["fr"],
+      "types": [
+        "etb",
+        "coffret"
+      ],
+      "languages": [
+        "fr"
+      ],
       "allowUnknownLanguage": true,
       "maxPrice": null,
       "retailers": [],
-      "channels": ["online", "deal"],
+      "channels": [
+        "online",
+        "deal"
+      ],
       "includePreorder": true,
       "includeDeals": true,
       "notifyListed": true,
@@ -25,12 +33,19 @@
       "notify": true,
       "keywords": [],
       "excludeKeywords": [],
-      "types": ["display"],
-      "languages": ["fr"],
+      "types": [
+        "display"
+      ],
+      "languages": [
+        "fr"
+      ],
       "allowUnknownLanguage": true,
       "maxPrice": null,
       "retailers": [],
-      "channels": ["online", "deal"],
+      "channels": [
+        "online",
+        "deal"
+      ],
       "includePreorder": true,
       "includeDeals": true,
       "notifyListed": true,
@@ -43,12 +58,53 @@
       "notify": true,
       "keywords": [],
       "excludeKeywords": [],
-      "types": ["booster"],
-      "languages": ["fr"],
+      "types": [
+        "booster"
+      ],
+      "languages": [
+        "fr"
+      ],
       "allowUnknownLanguage": true,
       "maxPrice": null,
       "retailers": [],
-      "channels": ["online", "deal"],
+      "channels": [
+        "online",
+        "deal"
+      ],
+      "includePreorder": true,
+      "includeDeals": true,
+      "notifyListed": true,
+      "promoOnly": false
+    },
+    {
+      "id": "30ans",
+      "name": "30ans",
+      "enabled": true,
+      "notify": true,
+      "keywords": [
+        "30 ans",
+        "30e anniversaire"
+      ],
+      "excludeKeywords": [],
+      "types": [
+        "etb",
+        "display",
+        "coffret",
+        "booster",
+        "carte",
+        "accessoire",
+        "autre"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "allowUnknownLanguage": true,
+      "maxPrice": null,
+      "retailers": [],
+      "channels": [
+        "online",
+        "deal"
+      ],
       "includePreorder": true,
       "includeDeals": true,
       "notifyListed": true,
