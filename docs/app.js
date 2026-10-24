@@ -108,8 +108,11 @@ function renderUpcoming() {
   }
   const cutoff = Date.now() - 45 * 864e5;
   const fr = $('#u-fr').checked, sealed = $('#u-sealed').checked;
+  // keywords of releases still to come (some shops list a product months before it comes out)
+  const futureKw = (rel?.releases ?? []).filter(r => (r.date.length === 10 ? r.date : r.date + '-28') >= today).flatMap(r => r.keywords ?? []);
+  const upcomingByCalendar = o => o.status !== 'disponible' && futureKw.some(k => containsPhrase(norm(o.title), k));
   const up = S.offers.filter(o => o.channel === 'online' && !o.removed
-    && (o.status === 'precommande' || (o.status === 'rupture' && o.listedAt && Date.parse(o.listedAt) >= cutoff) || (o.releaseHint && o.releaseHint >= today.slice(0, 7)))
+    && (o.status === 'precommande' || (o.status === 'rupture' && o.listedAt && Date.parse(o.listedAt) >= cutoff) || (o.releaseHint && o.releaseHint >= today.slice(0, 7)) || upcomingByCalendar(o))
     && (!fr || o.lang === 'fr' || o.lang == null) && (!sealed || SEALED.includes(o.type)))
     .sort((a, b) => Date.parse(b.listedAt ?? 0) - Date.parse(a.listedAt ?? 0));
   $('#upcoming').innerHTML = up.length ? up.slice(0, 80).map(o => offerCard(o, true)).join('') : '<p class="muted">Rien de nouveau référencé ces 45 derniers jours.</p>';

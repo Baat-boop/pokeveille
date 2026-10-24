@@ -18,7 +18,7 @@
     { "date": "2026-11-06", "name": "Collection Premium Métamorph 30e Anniversaire", "type": "coffret", "price": 49.99, "confirmed": false, "keywords": ["metamorph 30 anniversaire", "collection premium metamorph"] },
     { "date": "2026-11-06", "name": "Collections figurine Mew et Mewtwo 30e Anniversaire (Mewtwo le 27/11 selon une source)", "type": "coffret", "price": 37.99, "confirmed": false, "keywords": ["figurine mew 30 anniversaire", "figurine mewtwo"] },
     { "date": "2026-11-13", "name": "Collections autocollants 30e Anniversaire Lucario et Noadkoko d'Alola", "type": "coffret", "price": 19.99, "confirmed": false, "keywords": ["autocollant lucario", "autocollant noadkoko"] },
-    { "date": "2026-12-04", "name": "Dernière vague 30e Anniversaire (contenu non annoncé)", "type": "coffret", "confirmed": false, "keywords": ["30 anniversaire"] },
+    { "date": "2026-12-04", "name": "Dernière vague 30e Anniversaire (contenu non annoncé)", "type": "coffret", "confirmed": false, "keywords": [] },
     { "date": "2027-03", "dateLabel": "début 2027 (estimation)", "name": "Prochaine extension française (basée sur la japonaise « Aura Seeker ») — nom et date non annoncés", "type": "extension", "confirmed": false, "keywords": [] }
   ]
 }
