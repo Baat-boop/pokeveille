@@ -1,0 +1,84 @@
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5d6677; --line: #e1e4ea;
+  --accent: #d33a2c; --accent-ink: #ffffff; --link: #1f5fbf;
+  --ok: #1e8a4c; --ok-bg: #e3f5ea; --pre: #9a5b00; --pre-bg: #fff1d6;
+  --out: #8a1f1f; --out-bg: #fbe6e6; --unk: #4f5a6b; --unk-bg: #eceff3; --deal: #6b3fa0; --deal-bg: #efe6fa;
+  --radius: 10px; --shadow: 0 1px 2px rgba(20, 25, 40, .06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151b; --panel: #1b2029; --text: #e6e9ef; --muted: #9aa3b2; --line: #2c3340;
+    --accent: #ef5a4b; --link: #7fb0ff;
+    --ok: #6fd69a; --ok-bg: #173825; --pre: #f2bf63; --pre-bg: #3a2c10;
+    --out: #f19a9a; --out-bg: #3d1a1a; --unk: #b3bccb; --unk-bg: #262c37; --deal: #c9a5f2; --deal-bg: #2c2140;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+html { background: var(--bg); }
+body { background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--link); }
+header { background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }
+.bar { max-width: 1100px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.brand { font-weight: 700; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+.brand .dot { width: 14px; height: 14px; border-radius: 50%; background: linear-gradient(180deg, var(--accent) 50%, #fff 50%); border: 2px solid var(--text); }
+nav { display: flex; gap: 4px; overflow-x: auto; flex: 1; }
+nav button { background: none; border: 0; padding: 8px 12px; border-radius: 8px; color: var(--muted); font: inherit; cursor: pointer; white-space: nowrap; }
+nav button[aria-selected="true"] { background: var(--unk-bg); color: var(--text); font-weight: 600; }
+main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); margin-bottom: 14px; }
+h2 { font-size: 18px; margin: 0 0 10px; }
+h3 { font-size: 15px; margin: 14px 0 6px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+input[type=text], input[type=number], input[type=search], select, textarea {
+  font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 100%;
+}
+textarea { font-family: ui-monospace, Consolas, monospace; font-size: 12px; min-height: 160px; }
+.checks { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 14px; color: var(--text); }
+.checks label { display: inline-flex; gap: 5px; align-items: center; }
+.btn { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 7px 12px; border-radius: 8px; cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+.btn:disabled { opacity: .5; cursor: default; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.summary { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 12px; }
+.chip { font-size: 13px; padding: 3px 9px; border-radius: 999px; background: var(--unk-bg); color: var(--unk); }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 11px 13px; display: grid; grid-template-columns: 56px 1fr auto; gap: 12px; align-items: center; }
+.card img, .card .noimg { width: 56px; height: 56px; object-fit: contain; border-radius: 6px; background: var(--bg); }
+.card .t { font-weight: 600; }
+.card .t a { color: var(--text); text-decoration: none; }
+.card .t a:hover { text-decoration: underline; }
+.card .meta { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; }
+.price { text-align: right; font-weight: 700; font-size: 16px; white-space: nowrap; }
+.price s { color: var(--muted); font-weight: 400; font-size: 13px; display: block; }
+.badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.s-disponible { background: var(--ok-bg); color: var(--ok); }
+.s-precommande { background: var(--pre-bg); color: var(--pre); }
+.s-rupture { background: var(--out-bg); color: var(--out); }
+.s-inconnu { background: var(--unk-bg); color: var(--unk); }
+.s-deal { background: var(--deal-bg); color: var(--deal); }
+.warn { color: var(--pre); }
+.notice { border-left: 4px solid var(--pre); background: var(--pre-bg); color: var(--text); padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
+.notice.info { border-color: var(--link); background: var(--unk-bg); }
+#map { height: 340px; border-radius: var(--radius); border: 1px solid var(--line); margin-bottom: 12px; }
+.store { grid-template-columns: 1fr auto; }
+.lines { display: inline-flex; gap: 3px; flex-wrap: wrap; }
+.line { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: var(--text); color: var(--panel); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+td, th { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.search-item { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.search-item:last-child { border-bottom: 0; }
+dialog { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text); width: min(680px, calc(100vw - 32px)); padding: 16px; }
+dialog::backdrop { background: rgba(0, 0, 0, .45); }
+.hidden { display: none !important; }
+footer { max-width: 1100px; margin: 0 auto; padding: 0 16px 30px; font-size: 12px; color: var(--muted); }
+@media (max-width: 560px) {
+  .card { grid-template-columns: 44px 1fr; }
+  .card img, .card .noimg { width: 44px; height: 44px; }
+  .card .price { grid-column: 2; text-align: left; }
+  .store .price { grid-column: 1; }
+  .store { grid-template-columns: 1fr; }
+}

@@ -1,0 +1,9 @@
+{
+  "zone": { "label": "Amiens (centre)", "lat": 49.8942, "lon": 2.2957, "radiusKm": 15 },
+  "bus": {
+    "network": "Ametis",
+    "maxWalkMeters": 1200,
+    "excludedRoutes": ["NAM1", "NAM2", "NAVC"]
+  },
+  "discovery": { "bbox": "49.80,2.12,49.98,2.48" }
+}

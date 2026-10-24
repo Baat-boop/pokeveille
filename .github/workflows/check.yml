@@ -1,0 +1,57 @@
+name: Vérification des stocks
+
+on:
+  schedule:
+    # Toutes les 15 minutes (décalé de la minute 0, très chargée chez GitHub). Les passages peuvent être retardés.
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: stock-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Récupérer les données du passage précédent (branche data)
+        run: |
+          mkdir -p .data
+          if git ls-remote --exit-code --heads origin data >/dev/null; then
+            git fetch --depth=1 origin data
+            git archive FETCH_HEAD | tar -x -C .data
+          fi
+
+      - name: Vérifier les boutiques et envoyer les alertes
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: node src/check.js --data .data
+
+      - name: Publier les données (branche data, un seul commit écrasé à chaque fois)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd .data
+          git init -q -b data
+          git config user.name "pokeveille-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Données du $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
+
+      - name: Garder la planification active
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/check.yml/enable" || true

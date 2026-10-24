@@ -1,0 +1,1 @@
+{ "name": "pokeveille", "version": "1.0.0", "private": true, "type": "module", "scripts": { "check": "node src/check.js --data .data", "discover": "node src/discover-stores.js", "test": "node --test test/*.test.js" }, "engines": { "node": ">=20" } }

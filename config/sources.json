@@ -1,0 +1,60 @@
+[
+  {
+    "id": "pokemanias",
+    "name": "Pokémania",
+    "type": "shopify",
+    "baseUrl": "https://pokemanias.fr",
+    "pokemonOnly": true,
+    "defaultLanguage": "fr",
+    "note": "Boutique en ligne spécialisée Pokémon (catalogue français).",
+    "enabled": true
+  },
+  {
+    "id": "vcollect",
+    "name": "VCOLLECT (Caen)",
+    "type": "shopify",
+    "baseUrl": "https://vcollect.fr",
+    "pokemonOnly": true,
+    "defaultLanguage": null,
+    "note": "Boutique Pokémon, expédition depuis la France. Vend aussi du japonais / chinois (langue indiquée dans le titre).",
+    "enabled": true
+  },
+  {
+    "id": "sneyzen",
+    "name": "Sneyzen Corp (Paris)",
+    "type": "shopify",
+    "baseUrl": "https://sneyzencorp.com",
+    "pokemonOnly": true,
+    "defaultLanguage": null,
+    "note": "Spécialiste du scellé Pokémon, expédition depuis la France.",
+    "enabled": true
+  },
+  {
+    "id": "hikaru",
+    "name": "Hikaru Distribution (Paris)",
+    "type": "shopify",
+    "baseUrl": "https://hikarudistribution.com",
+    "pokemonOnly": false,
+    "defaultLanguage": null,
+    "note": "Gros catalogue (Pokémon FR/JP, autres TCG filtrés automatiquement).",
+    "enabled": true
+  },
+  {
+    "id": "dealabs",
+    "name": "Dealabs",
+    "type": "dealabs",
+    "url": "https://www.dealabs.com/rss/groupe/pokemon",
+    "note": "Bons plans postés par la communauté (Fnac, Leclerc, Carrefour, Amazon…). Ce n'est pas un stock vérifié.",
+    "enabled": true
+  },
+  {
+    "id": "pokecardshop",
+    "name": "PokeCardShop (Elbeuf)",
+    "type": "woocommerce",
+    "baseUrl": "https://pokecardshop.fr",
+    "pokemonOnly": false,
+    "defaultLanguage": null,
+    "note": "Désactivée : le site indiquait en octobre 2026 que les paiements en ligne étaient suspendus.",
+    "enabled": false
+  }
+]

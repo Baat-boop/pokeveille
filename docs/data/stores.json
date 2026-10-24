@@ -1,0 +1,2751 @@
+{
+ "generatedAt": "2026-10-24T08:42:51.671Z",
+ "zone": {
+  "label": "Amiens (centre)",
+  "lat": 49.8942,
+  "lon": 2.2957,
+  "radiusKm": 15
+ },
+ "maxWalkMeters": 1200,
+ "attribution": [
+  "Commerces : © contributeurs OpenStreetMap (ODbL)",
+  "Arrêts et lignes : réseau Ametis, transport.data.gouv.fr (Licence Ouverte)",
+  "Adresses manquantes : Géoplateforme IGN (adresses approximatives)"
+ ],
+ "stores": [
+  {
+   "id": "osm-node-6539474672",
+   "name": "Martelle jeux",
+   "brand": null,
+   "kind": "Boutique spécialisée (jeux, BD, manga)",
+   "likelihood": "probable",
+   "lat": 49.894225,
+   "lon": 2.297266,
+   "address": "5 Rue des Vergeaux 80000 Amiens",
+   "addressApprox": true,
+   "website": null,
+   "phone": null,
+   "openingHours": "Mo-Sa 10:00-19:00",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Dusevel",
+     "walkM": 131,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Beffroi",
+     "walkM": 210,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Hôtel de Ville",
+     "walkM": 248,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Jacobins",
+     "walkM": 324,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 112,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-5571122581",
+   "name": "Destock 80",
+   "brand": null,
+   "kind": "Bazar / déstockage",
+   "likelihood": "possible",
+   "lat": 49.894906,
+   "lon": 2.29699,
+   "address": "6 Rue Saint-Patrice 80000 Amiens",
+   "addressApprox": true,
+   "website": null,
+   "phone": null,
+   "openingHours": "Mo-Sa 09:30-19:00",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Beffroi",
+     "walkM": 113,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Dusevel",
+     "walkM": 177,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Hôtel de Ville",
+     "walkM": 317,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Place du Marché",
+     "walkM": 336,
+     "lines": [
+      "5B",
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 121,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-4857316845",
+   "name": "Le Sultan",
+   "brand": null,
+   "kind": "Presse",
+   "likelihood": "possible",
+   "lat": 49.893422,
+   "lon": 2.296921,
+   "address": "2 Rue Delambre 80000 Amiens",
+   "addressApprox": true,
+   "website": null,
+   "phone": null,
+   "openingHours": null,
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Hôtel de Ville",
+     "walkM": 149,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Dusevel",
+     "walkM": 207,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Jacobins",
+     "walkM": 236,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Beffroi",
+     "walkM": 310,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 123,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-4857316851",
+   "name": "La Croisée des rêves",
+   "brand": null,
+   "kind": "Boutique spécialisée (jeux, BD, manga)",
+   "likelihood": "probable",
+   "lat": 49.894052,
+   "lon": 2.297557,
+   "address": "6 Rue des Vergeaux 80000 Amiens",
+   "addressApprox": true,
+   "website": null,
+   "phone": null,
+   "openingHours": null,
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Dusevel",
+     "walkM": 110,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Beffroi",
+     "walkM": 245,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Hôtel de Ville",
+     "walkM": 250,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Jacobins",
+     "walkM": 292,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 134,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-5574263881",
+   "name": "Stock en Bulle",
+   "brand": null,
+   "kind": "Librairie BD / manga",
+   "likelihood": "possible",
+   "lat": 49.895311,
+   "lon": 2.296904,
+   "address": "8 Rue des Chaudronniers 80000 Amiens",
+   "addressApprox": true,
+   "website": "https://www.stockenbulle.com/",
+   "phone": "+33 3 22 22 06 78",
+   "openingHours": "Mo-Sa 10:00-19:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Beffroi",
+     "walkM": 69,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Dusevel",
+     "walkM": 218,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Place du Marché",
+     "walkM": 312,
+     "lines": [
+      "5B",
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "La Bretesque",
+     "walkM": 318,
+     "lines": [
+      "CDV"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 151,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-4857631483",
+   "name": "Au Pacha",
+   "brand": null,
+   "kind": "Presse",
+   "likelihood": "possible",
+   "lat": 49.893112,
+   "lon": 2.297924,
+   "address": "1 Rue des Trois-Cailloux 80000 Amiens",
+   "addressApprox": true,
+   "website": null,
+   "phone": "+33 3 22 91 31 74",
+   "openingHours": "Mo-Sa 07:00-19:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Jacobins",
+     "walkM": 152,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Dusevel",
+     "walkM": 187,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Hôtel de Ville",
+     "walkM": 227,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Palais de Justice",
+     "walkM": 323,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 200,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-2927141958",
+   "name": "Bulle en Stock Neuf Et Occasion",
+   "brand": null,
+   "kind": "Librairie BD / manga",
+   "likelihood": "possible",
+   "lat": 49.895497,
+   "lon": 2.297781,
+   "address": "4 Rue du Marché Lanselles 80000 Amiens",
+   "addressApprox": true,
+   "website": "https://www.bulleenstock.com/",
+   "phone": "+33 3 22 91 50 10",
+   "openingHours": "Mo-Sa 10:00-19:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Beffroi",
+     "walkM": 143,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Dusevel",
+     "walkM": 189,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "UPJV Saint Leu",
+     "walkM": 289,
+     "lines": [
+      "5A",
+      "5B",
+      "11",
+      "L",
+      "N3"
+     ]
+    },
+    {
+     "name": "La Bretesque",
+     "walkM": 295,
+     "lines": [
+      "CDV"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 207,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-3712070798",
+   "name": "Game Cash",
+   "brand": null,
+   "kind": "Jeux vidéo / occasion",
+   "likelihood": "probable",
+   "lat": 49.892199,
+   "lon": 2.297765,
+   "address": "12 Rue des Jacobins 80000 Amiens",
+   "addressApprox": true,
+   "website": null,
+   "phone": null,
+   "openingHours": null,
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Jacobins",
+     "walkM": 63,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Hôtel de Ville",
+     "walkM": 236,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Musée",
+     "walkM": 314,
+     "lines": [
+      "CDV"
+     ]
+    },
+    {
+     "name": "Dusevel",
+     "walkM": 317,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 267,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-3901896334",
+   "name": "Fnac",
+   "brand": "Fnac",
+   "kind": "Culture / multimédia",
+   "likelihood": "probable",
+   "lat": 49.892638,
+   "lon": 2.298572,
+   "address": "12 Rue des Trois Cailloux, 80000 Amiens",
+   "addressApprox": false,
+   "website": "https://www.fnac.com/Amiens/Fnac-Amiens/cl123/w-4",
+   "phone": "0 825 02 00 20",
+   "openingHours": "Mo-Fr 10:00-19:00, Sa 10:00-19:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Jacobins",
+     "walkM": 78,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Dusevel",
+     "walkM": 243,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Palais de Justice",
+     "walkM": 275,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Hôtel de Ville",
+     "walkM": 289,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 269,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-3103831015",
+   "name": "Maison de la Presse",
+   "brand": "Maison de la Presse",
+   "kind": "Presse",
+   "likelihood": "possible",
+   "lat": 49.892154,
+   "lon": 2.297894,
+   "address": "12 Rue des Jacobins 80000 Amiens",
+   "addressApprox": true,
+   "website": null,
+   "phone": null,
+   "openingHours": null,
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Jacobins",
+     "walkM": 50,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Hôtel de Ville",
+     "walkM": 249,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Musée",
+     "walkM": 315,
+     "lines": [
+      "CDV"
+     ]
+    },
+    {
+     "name": "Dusevel",
+     "walkM": 321,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 276,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-3901287998",
+   "name": "L'Antre du Manga",
+   "brand": null,
+   "kind": "Boutique spécialisée (jeux, BD, manga)",
+   "likelihood": "probable",
+   "lat": 49.89608,
+   "lon": 2.298265,
+   "address": "7 Rue des Orfèvres 80000 Amiens",
+   "addressApprox": true,
+   "website": null,
+   "phone": null,
+   "openingHours": null,
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Beffroi",
+     "walkM": 205,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "UPJV Saint Leu",
+     "walkM": 205,
+     "lines": [
+      "5A",
+      "5B",
+      "11",
+      "L",
+      "N3"
+     ]
+    },
+    {
+     "name": "La Bretesque",
+     "walkM": 229,
+     "lines": [
+      "CDV"
+     ]
+    },
+    {
+     "name": "Dusevel",
+     "walkM": 257,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 278,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-3103830991",
+   "name": "Ma Biche",
+   "brand": null,
+   "kind": "Magasin de jouets",
+   "likelihood": "possible",
+   "lat": 49.891464,
+   "lon": 2.299635,
+   "address": "40 Rue des Jacobins 80000 Amiens",
+   "addressApprox": true,
+   "website": null,
+   "phone": null,
+   "openingHours": "Tu-Fr 10:00-13:00,14:00-19:00; Sa 10:00-19:00",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Jacobins",
+     "walkM": 146,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "René Goblet",
+     "walkM": 244,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Émile Zola",
+     "walkM": 279,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Palais de Justice",
+     "walkM": 302,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "CDV",
+      "N1",
+      "N4"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 415,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-3101180393",
+   "name": "Le New's",
+   "brand": null,
+   "kind": "Presse",
+   "likelihood": "possible",
+   "lat": 49.888896,
+   "lon": 2.30313,
+   "address": "49 Rue des Otages 80000 Amiens",
+   "addressApprox": true,
+   "website": null,
+   "phone": null,
+   "openingHours": null,
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Otages",
+     "walkM": 91,
+     "lines": [
+      "11",
+      "12",
+      "L",
+      "N2",
+      "N3"
+     ]
+    },
+    {
+     "name": "Joffre",
+     "walkM": 137,
+     "lines": [
+      "6",
+      "15",
+      "CDV"
+     ]
+    },
+    {
+     "name": "Émile Zola",
+     "walkM": 241,
+     "lines": [
+      "6",
+      "7",
+      "9",
+      "16",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Gare du Nord quai D",
+     "walkM": 318,
+     "lines": [
+      "L",
+      "N2"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 794,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-5278194916",
+   "name": "HEMA",
+   "brand": "HEMA",
+   "kind": "Bazar / déstockage",
+   "likelihood": "possible",
+   "lat": 49.890708,
+   "lon": 2.305502,
+   "address": "36 Rue de Noyon",
+   "addressApprox": false,
+   "website": "https://magasins.hema.com/fr/amiens/hema-amiens-rue-de-noyon",
+   "phone": "+33 3 22 34 29 93",
+   "openingHours": "Mo-Sa 10:00-19:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Gare du Nord quai D",
+     "walkM": 79,
+     "lines": [
+      "L",
+      "N2"
+     ]
+    },
+    {
+     "name": "Gare du Nord quai A",
+     "walkM": 111,
+     "lines": [
+      "5B",
+      "13",
+      "14",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Gare du Nord quai C",
+     "walkM": 126,
+     "lines": [
+      "7",
+      "9",
+      "11",
+      "12",
+      "CDV",
+      "N2",
+      "N3"
+     ]
+    },
+    {
+     "name": "Gare du Nord quai B",
+     "walkM": 160,
+     "lines": [
+      "5A",
+      "13",
+      "14",
+      "N1",
+      "N4"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 802,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-14087457120",
+   "name": "Relay",
+   "brand": "Relay",
+   "kind": "Presse",
+   "likelihood": "possible",
+   "lat": 49.890406,
+   "lon": 2.308081,
+   "address": "1 Rue Jules Barni 80000 Amiens",
+   "addressApprox": true,
+   "website": null,
+   "phone": null,
+   "openingHours": null,
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Gare du Nord quai B",
+     "walkM": 88,
+     "lines": [
+      "5A",
+      "13",
+      "14",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Gare du Nord quai A",
+     "walkM": 133,
+     "lines": [
+      "5B",
+      "13",
+      "14",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Gare du Nord quai C",
+     "walkM": 158,
+     "lines": [
+      "7",
+      "9",
+      "11",
+      "12",
+      "CDV",
+      "N2",
+      "N3"
+     ]
+    },
+    {
+     "name": "Gare du Nord quai D",
+     "walkM": 208,
+     "lines": [
+      "L",
+      "N2"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 982,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-way-366866808",
+   "name": "Relay",
+   "brand": "Relay",
+   "kind": "Presse",
+   "likelihood": "possible",
+   "lat": 49.890734,
+   "lon": 2.308467,
+   "address": "47 Place Alphonse Fiquet 80000 Amiens",
+   "addressApprox": true,
+   "website": "https://www.relay.com/stores/relay-gare-d-amiens/",
+   "phone": "+33 3 22 72 75 33",
+   "openingHours": "Mo-Th 05:15-20:45; Fr 05:15-21:00; Sa-Su 07:00-13:00",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Gare du Nord quai B",
+     "walkM": 134,
+     "lines": [
+      "5A",
+      "13",
+      "14",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Gare du Nord quai C",
+     "walkM": 164,
+     "lines": [
+      "7",
+      "9",
+      "11",
+      "12",
+      "CDV",
+      "N2",
+      "N3"
+     ]
+    },
+    {
+     "name": "Gare du Nord quai A",
+     "walkM": 170,
+     "lines": [
+      "5B",
+      "13",
+      "14",
+      "N1",
+      "N4"
+     ]
+    },
+    {
+     "name": "Gare Routière",
+     "walkM": 192,
+     "lines": [
+      "7"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 992,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-9287495229",
+   "name": "Super U",
+   "brand": "Super U",
+   "kind": "Supermarché",
+   "likelihood": "possible",
+   "lat": 49.898785,
+   "lon": 2.270224,
+   "address": "Rue Edouard Lucas 80000 Amiens",
+   "addressApprox": true,
+   "website": "https://www.magasins-u.com/magasin/superu-amiens.m25871",
+   "phone": "+33 3 22 50 08 44",
+   "openingHours": "Mo-Sa 08:30-20:00; Su 09:00-12:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Collège Edouard Lucas",
+     "walkM": 66,
+     "lines": [
+      "16"
+     ]
+    },
+    {
+     "name": "Robert Le Coq",
+     "walkM": 241,
+     "lines": [
+      "7"
+     ]
+    },
+    {
+     "name": "Hippodrome",
+     "walkM": 262,
+     "lines": [
+      "N4"
+     ]
+    },
+    {
+     "name": "Pôle Licorne",
+     "walkM": 302,
+     "lines": [
+      "N4"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 1895,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-2513004265",
+   "name": "Intermarché Super",
+   "brand": "Intermarché Super",
+   "kind": "Supermarché",
+   "likelihood": "possible",
+   "lat": 49.873766,
+   "lon": 2.286882,
+   "address": "Rue Alexandre Dumas",
+   "addressApprox": false,
+   "website": "https://www.intermarche.com/magasins/01149/amiens-80000/infos-pratiques",
+   "phone": "+33 3 22 45 30 11",
+   "openingHours": "Mo-Sa 08:30-19:30; Su 09:00-12:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Royaume Uni",
+     "walkM": 159,
+     "lines": [
+      "10"
+     ]
+    },
+    {
+     "name": "Georges Beauvais",
+     "walkM": 218,
+     "lines": [
+      "5A",
+      "5B",
+      "15",
+      "N3"
+     ]
+    },
+    {
+     "name": "Espagne",
+     "walkM": 379,
+     "lines": [
+      "10",
+      "N3"
+     ]
+    },
+    {
+     "name": "Paul Eluard",
+     "walkM": 451,
+     "lines": [
+      "5A",
+      "5B",
+      "15"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 2358,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-3319501648",
+   "name": "Auchan Supermarché",
+   "brand": "Auchan Supermarché",
+   "kind": "Supermarché",
+   "likelihood": "possible",
+   "lat": 49.875137,
+   "lon": 2.313408,
+   "address": "7 Allée de Beaulieu 80090 Amiens",
+   "addressApprox": true,
+   "website": "https://www.auchan.fr/magasins/supermarche/auchan-supermarche-amiens-rollin/s-1195",
+   "phone": "+33 3 22 46 11 48",
+   "openingHours": "Mo-Sa 08:30-19:30; Su 09:00-12:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Rollin",
+     "walkM": 213,
+     "lines": [
+      "10",
+      "12",
+      "N4"
+     ]
+    },
+    {
+     "name": "Ormaie",
+     "walkM": 276,
+     "lines": [
+      "10",
+      "12",
+      "N4"
+     ]
+    },
+    {
+     "name": "Hôtel des Impôts",
+     "walkM": 537,
+     "lines": [
+      "10",
+      "12",
+      "N4"
+     ]
+    },
+    {
+     "name": "Collège Jean Marc Laurent",
+     "walkM": 625,
+     "lines": [
+      "5A",
+      "5B",
+      "6",
+      "12"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 2470,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-270496758",
+   "name": "Carrefour",
+   "brand": "Carrefour",
+   "kind": "Hypermarché",
+   "likelihood": "probable",
+   "lat": 49.92016,
+   "lon": 2.301985,
+   "address": "12 Rue Durer 80080 Amiens",
+   "addressApprox": true,
+   "website": "https://www.carrefour.fr/magasin/amiens",
+   "phone": "+33 322666138",
+   "openingHours": "Mo-Sa 08:30-21:00; Su 09:00-12:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Centre Commercial Nord quai",
+     "walkM": 135,
+     "lines": [
+      "8",
+      "12",
+      "L",
+      "N3"
+     ]
+    },
+    {
+     "name": "Michel Ange",
+     "walkM": 283,
+     "lines": [
+      "L"
+     ]
+    },
+    {
+     "name": "Fernand Léger",
+     "walkM": 318,
+     "lines": [
+      "L"
+     ]
+    },
+    {
+     "name": "Promenade",
+     "walkM": 480,
+     "lines": [
+      "N3"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 2922,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-1540492116",
+   "name": "JouéClub",
+   "brand": "JouéClub",
+   "kind": "Magasin de jouets",
+   "likelihood": "probable",
+   "lat": 49.868013,
+   "lon": 2.282547,
+   "address": "5 Avenue de Grèce 80090 Amiens",
+   "addressApprox": true,
+   "website": null,
+   "phone": null,
+   "openingHours": null,
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Grèce",
+     "walkM": 54,
+     "lines": [
+      "10",
+      "N3"
+     ]
+    },
+    {
+     "name": "Pinel",
+     "walkM": 417,
+     "lines": [
+      "15"
+     ]
+    },
+    {
+     "name": "I.M.E",
+     "walkM": 542,
+     "lines": [
+      "10",
+      "15",
+      "N3"
+     ]
+    },
+    {
+     "name": "Espagne",
+     "walkM": 544,
+     "lines": [
+      "10",
+      "N3"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3061,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-3347778260",
+   "name": "Toute La Presse",
+   "brand": null,
+   "kind": "Presse",
+   "likelihood": "possible",
+   "lat": 49.875927,
+   "lon": 2.328392,
+   "address": "470 Rue de Cagny 80090 Amiens",
+   "addressApprox": true,
+   "website": null,
+   "phone": "+33 3 22 46 37 48",
+   "openingHours": "Mo-Sa 07:30-19:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Edmond Rostand",
+     "walkM": 132,
+     "lines": [
+      "5A",
+      "5B",
+      "13"
+     ]
+    },
+    {
+     "name": "Square Laclos",
+     "walkM": 157,
+     "lines": [
+      "10",
+      "13"
+     ]
+    },
+    {
+     "name": "Raymond Gourdain",
+     "walkM": 278,
+     "lines": [
+      "5A",
+      "5B"
+     ]
+    },
+    {
+     "name": "Condorcet",
+     "walkM": 329,
+     "lines": [
+      "10",
+      "13"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3101,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-9990040871",
+   "name": "Maxi Bazar",
+   "brand": "Maxi Bazar",
+   "kind": "Bazar / déstockage",
+   "likelihood": "possible",
+   "lat": 49.922263,
+   "lon": 2.301628,
+   "address": "Rue Vélasquez, 80000",
+   "addressApprox": false,
+   "website": "https://www.maxibazar.fr/amiens.html",
+   "phone": "+33 3 65 89 09 91",
+   "openingHours": "Mo-Sa 10:00-19:00; Su off",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Michel Ange",
+     "walkM": 102,
+     "lines": [
+      "L"
+     ]
+    },
+    {
+     "name": "Centre Commercial Nord quai",
+     "walkM": 107,
+     "lines": [
+      "8",
+      "12",
+      "L",
+      "N3"
+     ]
+    },
+    {
+     "name": "Quentin la Tour",
+     "walkM": 261,
+     "lines": [
+      "8"
+     ]
+    },
+    {
+     "name": "Promenade",
+     "walkM": 404,
+     "lines": [
+      "N3"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3149,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-5278220521",
+   "name": "Stokomani",
+   "brand": "Stokomani",
+   "kind": "Bazar / déstockage",
+   "likelihood": "possible",
+   "lat": 49.921551,
+   "lon": 2.307346,
+   "address": "150 Avenue de l'Europe 80080 Amiens",
+   "addressApprox": true,
+   "website": "https://www.stokomani.fr/pages/boutique-stokomani-amiens-80000",
+   "phone": null,
+   "openingHours": "Mo-Sa 09:00-19:30; Su off",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Promenade",
+     "walkM": 94,
+     "lines": [
+      "N3"
+     ]
+    },
+    {
+     "name": "Centre Commercial Nord quai",
+     "walkM": 378,
+     "lines": [
+      "8",
+      "12",
+      "L",
+      "N3"
+     ]
+    },
+    {
+     "name": "Michel Ange",
+     "walkM": 626,
+     "lines": [
+      "L"
+     ]
+    },
+    {
+     "name": "Quentin la Tour",
+     "walkM": 782,
+     "lines": [
+      "8"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3154,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-2587152537",
+   "name": "Intermarché Super",
+   "brand": "Intermarché Super",
+   "kind": "Supermarché",
+   "likelihood": "possible",
+   "lat": 49.900461,
+   "lon": 2.339944,
+   "address": "Rue Ambroise Croizat",
+   "addressApprox": false,
+   "website": "https://www.intermarche.com/magasins/01107/camon-80450/infos-pratiques",
+   "phone": "+33 3 22 70 22 44",
+   "openingHours": "Mo-Sa 08:30-20:00; Su 09:00-12:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "La Blanche Tâche",
+     "walkM": 91,
+     "lines": [
+      "7",
+      "9"
+     ]
+    },
+    {
+     "name": "La Tourelle",
+     "walkM": 669,
+     "lines": [
+      "7"
+     ]
+    },
+    {
+     "name": "Cayeux",
+     "walkM": 681,
+     "lines": [
+      "7",
+      "9"
+     ]
+    },
+    {
+     "name": "Lucien Barbier",
+     "walkM": 687,
+     "lines": [
+      "7"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3245,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-3785144920",
+   "name": "Intermarché Super",
+   "brand": "Intermarché Super",
+   "kind": "Supermarché",
+   "likelihood": "possible",
+   "lat": 49.911695,
+   "lon": 2.258753,
+   "address": "Rue d'Abbeville",
+   "addressApprox": false,
+   "website": "https://www.intermarche.com/magasins/01792/amiens-80000/infos-pratiques",
+   "phone": "+33 3 22 44 68 75",
+   "openingHours": "Mo-Sa 08:30-20:00; Su 09:00-12:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Place la Barre",
+     "walkM": 219,
+     "lines": [
+      "16",
+      "N1"
+     ]
+    },
+    {
+     "name": "La Fontaine",
+     "walkM": 406,
+     "lines": [
+      "8",
+      "11",
+      "16",
+      "N1"
+     ]
+    },
+    {
+     "name": "Les Coursives",
+     "walkM": 486,
+     "lines": [
+      "8",
+      "11",
+      "16",
+      "N1"
+     ]
+    },
+    {
+     "name": "Rue de Grâce",
+     "walkM": 636,
+     "lines": [
+      "8",
+      "11"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3284,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-5298098914",
+   "name": "King Jouet",
+   "brand": "King Jouet",
+   "kind": "Magasin de jouets",
+   "likelihood": "probable",
+   "lat": 49.92273,
+   "lon": 2.309472,
+   "address": "150 Avenue de l'Europe 80080 Amiens",
+   "addressApprox": true,
+   "website": "https://www.king-jouet.com/magasins/80-Somme/magasin-AMIENS-0214.htm",
+   "phone": "+33 3 10 92 70 02",
+   "openingHours": "Mo-Su 10:00-19:00; Su off",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Promenade",
+     "walkM": 241,
+     "lines": [
+      "N3"
+     ]
+    },
+    {
+     "name": "Centre Commercial Nord quai",
+     "walkM": 612,
+     "lines": [
+      "8",
+      "12",
+      "L",
+      "N3"
+     ]
+    },
+    {
+     "name": "Michel Ange",
+     "walkM": 830,
+     "lines": [
+      "L"
+     ]
+    },
+    {
+     "name": "Quentin la Tour",
+     "walkM": 938,
+     "lines": [
+      "8"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3322,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-5259211344",
+   "name": "Cultura",
+   "brand": null,
+   "kind": "Culture / multimédia",
+   "likelihood": "probable",
+   "lat": 49.923647,
+   "lon": 2.306569,
+   "address": "150 Avenue de l'Europe",
+   "addressApprox": false,
+   "website": "https://www.cultura.com/les-magasins/cultura-amiens.html",
+   "phone": "+33 644603926",
+   "openingHours": "Mo-Sa 09:00-20:00",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Promenade",
+     "walkM": 207,
+     "lines": [
+      "N3"
+     ]
+    },
+    {
+     "name": "Centre Commercial Nord quai",
+     "walkM": 381,
+     "lines": [
+      "8",
+      "12",
+      "L",
+      "N3"
+     ]
+    },
+    {
+     "name": "Michel Ange",
+     "walkM": 604,
+     "lines": [
+      "L"
+     ]
+    },
+    {
+     "name": "Quentin la Tour",
+     "walkM": 664,
+     "lines": [
+      "8"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3366,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-way-139888232",
+   "name": "NOZ",
+   "brand": "NOZ",
+   "kind": "Bazar / déstockage",
+   "likelihood": "possible",
+   "lat": 49.924759,
+   "lon": 2.301356,
+   "address": "30 Rue le Tintoret, 80000 Amiens",
+   "addressApprox": false,
+   "website": "https://nozarrivages.com/magasin/amiens/",
+   "phone": "+33 3 22 44 55 82",
+   "openingHours": "Mo-Sa 09:30-19:30; Su off",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Quentin la Tour",
+     "walkM": 265,
+     "lines": [
+      "8"
+     ]
+    },
+    {
+     "name": "Centre Commercial Nord quai",
+     "walkM": 327,
+     "lines": [
+      "8",
+      "12",
+      "L",
+      "N3"
+     ]
+    },
+    {
+     "name": "Michel Ange",
+     "walkM": 406,
+     "lines": [
+      "L"
+     ]
+    },
+    {
+     "name": "Le Tintoret",
+     "walkM": 487,
+     "lines": [
+      "8"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3422,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-5271891460",
+   "name": "Action",
+   "brand": "Action",
+   "kind": "Bazar / déstockage",
+   "likelihood": "possible",
+   "lat": 49.924546,
+   "lon": 2.308383,
+   "address": null,
+   "addressApprox": true,
+   "website": "https://www.action.com/fr-fr/points-de-vente/amiens-centre-commercial-green-center-avenue-de-leurope/",
+   "phone": "+33 155564152",
+   "openingHours": "Mo-Sa 08:30-20:00",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Promenade",
+     "walkM": 366,
+     "lines": [
+      "N3"
+     ]
+    },
+    {
+     "name": "Centre Commercial Nord quai",
+     "walkM": 591,
+     "lines": [
+      "8",
+      "12",
+      "L",
+      "N3"
+     ]
+    },
+    {
+     "name": "Michel Ange",
+     "walkM": 812,
+     "lines": [
+      "L"
+     ]
+    },
+    {
+     "name": "Quentin la Tour",
+     "walkM": 848,
+     "lines": [
+      "8"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3494,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-2517457402",
+   "name": "GiFi",
+   "brand": "GiFi",
+   "kind": "Bazar / déstockage",
+   "likelihood": "possible",
+   "lat": 49.924469,
+   "lon": 2.308988,
+   "address": null,
+   "addressApprox": true,
+   "website": "https://magasins.gifi.fr/fr/gifi-amiens-nord-29614",
+   "phone": "+33 3 22 55 07 41",
+   "openingHours": "Mo-Sa 09:30-19:00; Su 10:00-13:00",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Promenade",
+     "walkM": 379,
+     "lines": [
+      "N3"
+     ]
+    },
+    {
+     "name": "Centre Commercial Nord quai",
+     "walkM": 635,
+     "lines": [
+      "8",
+      "12",
+      "L",
+      "N3"
+     ]
+    },
+    {
+     "name": "Michel Ange",
+     "walkM": 858,
+     "lines": [
+      "L"
+     ]
+    },
+    {
+     "name": "Quentin la Tour",
+     "walkM": 902,
+     "lines": [
+      "8"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3498,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-6387948260",
+   "name": "E.Leclerc",
+   "brand": "E.Leclerc",
+   "kind": "Hypermarché",
+   "likelihood": "probable",
+   "lat": 49.9135,
+   "lon": 2.336915,
+   "address": "Avenue de la Défense Passive, 80136 Rivery",
+   "addressApprox": false,
+   "website": "https://e.leclerc/mag/e-leclerc-rivery",
+   "phone": "+33 3 22 70 28 28",
+   "openingHours": "Mo-Sa 08:30-20:00; Su 08:30-12:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Alain Colas",
+     "walkM": 188,
+     "lines": [
+      "9"
+     ]
+    },
+    {
+     "name": "René Cassin",
+     "walkM": 203,
+     "lines": [
+      "9"
+     ]
+    },
+    {
+     "name": "La Haute Borne",
+     "walkM": 248,
+     "lines": [
+      "9"
+     ]
+    },
+    {
+     "name": "Les Marronniers",
+     "walkM": 773,
+     "lines": [
+      "9"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3649,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-12977592063",
+   "name": "Action",
+   "brand": "Action",
+   "kind": "Bazar / déstockage",
+   "likelihood": "possible",
+   "lat": 49.910362,
+   "lon": 2.251257,
+   "address": "Rue d'Abbeville",
+   "addressApprox": false,
+   "website": "https://www.action.com/fr-fr/points-de-vente/amiens-rue-d-abbeville-495/",
+   "phone": null,
+   "openingHours": "Mo-Sa 08:30-19:30; Su off",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Rue de Grâce",
+     "walkM": 171,
+     "lines": [
+      "8",
+      "11"
+     ]
+    },
+    {
+     "name": "La Fontaine",
+     "walkM": 358,
+     "lines": [
+      "8",
+      "11",
+      "16",
+      "N1"
+     ]
+    },
+    {
+     "name": "Artois",
+     "walkM": 413,
+     "lines": [
+      "8",
+      "11"
+     ]
+    },
+    {
+     "name": "Place la Barre",
+     "walkM": 572,
+     "lines": [
+      "16",
+      "N1"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3655,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-1547038012",
+   "name": "Auchan",
+   "brand": "Auchan",
+   "kind": "Hypermarché",
+   "likelihood": "probable",
+   "lat": 49.862494,
+   "lon": 2.280887,
+   "address": "Route d'Amiens",
+   "addressApprox": false,
+   "website": "https://www.auchan.fr/magasins/hypermarche/auchan-hypermarche-amiens/s-101",
+   "phone": "+33 3 22 33 53 00",
+   "openingHours": "Mo-Sa 08:30-21:00; Su 09:00-12:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Centre Commercial Sud",
+     "walkM": 420,
+     "lines": [
+      "10",
+      "15",
+      "N3"
+     ]
+    },
+    {
+     "name": "I.M.E",
+     "walkM": 540,
+     "lines": [
+      "10",
+      "15",
+      "N3"
+     ]
+    },
+    {
+     "name": "Grèce",
+     "walkM": 866,
+     "lines": [
+      "10",
+      "N3"
+     ]
+    },
+    {
+     "name": "Pinel",
+     "walkM": 1148,
+     "lines": [
+      "15"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3682,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-2513050463",
+   "name": "E.Leclerc",
+   "brand": "E.Leclerc",
+   "kind": "Hypermarché",
+   "likelihood": "probable",
+   "lat": 49.869472,
+   "lon": 2.26073,
+   "address": "Rue Albert Camus",
+   "addressApprox": false,
+   "website": "https://www.e.leclerc/mag/e-leclerc-salouel",
+   "phone": "+33 3 22 33 64 90",
+   "openingHours": "Mo-Sa 08:30-20:00; Su off",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Résidence du Thil",
+     "walkM": 238,
+     "lines": [
+      "5A",
+      "5B",
+      "10",
+      "L",
+      "N2"
+     ]
+    },
+    {
+     "name": "IUT",
+     "walkM": 485,
+     "lines": [
+      "10",
+      "N2"
+     ]
+    },
+    {
+     "name": "Laënnec quai C",
+     "walkM": 510,
+     "lines": [
+      "5A",
+      "5B"
+     ]
+    },
+    {
+     "name": "Laënnec quai A",
+     "walkM": 525,
+     "lines": [
+      "9",
+      "10",
+      "L",
+      "N2"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3720,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-12631358880",
+   "name": "Micromania",
+   "brand": "Micromania",
+   "kind": "Jeux vidéo / occasion",
+   "likelihood": "probable",
+   "lat": 49.862092,
+   "lon": 2.280162,
+   "address": "La Croix Blanche 80480 Dury",
+   "addressApprox": true,
+   "website": "https://www.micromania.fr/magasin?storeid=AD",
+   "phone": null,
+   "openingHours": "Mo-Sa 09:30-20:00",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Centre Commercial Sud",
+     "walkM": 353,
+     "lines": [
+      "10",
+      "15",
+      "N3"
+     ]
+    },
+    {
+     "name": "I.M.E",
+     "walkM": 558,
+     "lines": [
+      "10",
+      "15",
+      "N3"
+     ]
+    },
+    {
+     "name": "Grèce",
+     "walkM": 937,
+     "lines": [
+      "10",
+      "N3"
+     ]
+    },
+    {
+     "name": "Route d'Amiens",
+     "walkM": 1144,
+     "lines": [
+      "15"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3740,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-way-829112266",
+   "name": "Action",
+   "brand": "Action",
+   "kind": "Bazar / déstockage",
+   "likelihood": "possible",
+   "lat": 49.860751,
+   "lon": 2.282075,
+   "address": "30 Allée de la Pépinière - Oasis 80480 Dury",
+   "addressApprox": true,
+   "website": "https://www.action.com/fr-fr/points-de-vente/amiens--dury/",
+   "phone": "+33 1 55 56 41 52",
+   "openingHours": "Mo-Sa 08:30-19:30; Su off",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Centre Commercial Sud",
+     "walkM": 575,
+     "lines": [
+      "10",
+      "15",
+      "N3"
+     ]
+    },
+    {
+     "name": "I.M.E",
+     "walkM": 813,
+     "lines": [
+      "10",
+      "15",
+      "N3"
+     ]
+    },
+    {
+     "name": "Grèce",
+     "walkM": 1104,
+     "lines": [
+      "10",
+      "N3"
+     ]
+    },
+    {
+     "name": "Route d'Amiens",
+     "walkM": 1105,
+     "lines": [
+      "15"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3845,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-1761959756",
+   "name": "Presse, cafétéria...",
+   "brand": null,
+   "kind": "Presse",
+   "likelihood": "possible",
+   "lat": 49.871907,
+   "lon": 2.253751,
+   "address": null,
+   "addressApprox": true,
+   "website": null,
+   "phone": null,
+   "openingHours": null,
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Laënnec quai C",
+     "walkM": 234,
+     "lines": [
+      "5A",
+      "5B"
+     ]
+    },
+    {
+     "name": "Laënnec quai A",
+     "walkM": 265,
+     "lines": [
+      "9",
+      "10",
+      "L",
+      "N2"
+     ]
+    },
+    {
+     "name": "Laënnec quai B",
+     "walkM": 271,
+     "lines": [
+      "9",
+      "10",
+      "L",
+      "N2"
+     ]
+    },
+    {
+     "name": "CHU A. Picardie quai C",
+     "walkM": 330,
+     "lines": [
+      "7",
+      "9",
+      "10",
+      "11",
+      "L",
+      "N2"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 3896,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-way-282319840",
+   "name": "Carrefour Contact",
+   "brand": "Carrefour Contact",
+   "kind": "Supermarché",
+   "likelihood": "possible",
+   "lat": 49.874628,
+   "lon": 2.247424,
+   "address": "1 Chemin de Salouël 80480 Pont-de-Metz",
+   "addressApprox": true,
+   "website": "https://www.carrefour.fr/magasin/contact-pont-de-metz",
+   "phone": "+33 3 22 95 81 07",
+   "openingHours": "Mo-Sa 08:00-20:00; Su 09:00-13:00",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Henri Grémont",
+     "walkM": 165,
+     "lines": [
+      "11"
+     ]
+    },
+    {
+     "name": "Pont de Metz",
+     "walkM": 236,
+     "lines": [
+      "7"
+     ]
+    },
+    {
+     "name": "Pont Saint Jean",
+     "walkM": 411,
+     "lines": [
+      "7",
+      "11"
+     ]
+    },
+    {
+     "name": "Mairie de Salouël",
+     "walkM": 611,
+     "lines": [
+      "11"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 4087,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-way-141186734",
+   "name": "Carrefour Market",
+   "brand": "Carrefour Market",
+   "kind": "Supermarché",
+   "likelihood": "possible",
+   "lat": 49.859527,
+   "lon": 2.346701,
+   "address": "35 Rue Henri Barbusse 80330 Cagny",
+   "addressApprox": true,
+   "website": "https://www.carrefour.fr/magasin/market-cagny",
+   "phone": "+33 3 22 89 33 07",
+   "openingHours": "Mo-Sa 08:30-19:30; Su 09:00-12:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Montmignon",
+     "walkM": 59,
+     "lines": [
+      "13"
+     ]
+    },
+    {
+     "name": "Epinette",
+     "walkM": 307,
+     "lines": [
+      "13"
+     ]
+    },
+    {
+     "name": "Place de Cagny",
+     "walkM": 588,
+     "lines": [
+      "10",
+      "13",
+      "N4"
+     ]
+    },
+    {
+     "name": "Cagny Z.I.",
+     "walkM": 607,
+     "lines": [
+      "13"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 5312,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-way-874896703",
+   "name": "Intermarché Super",
+   "brand": "Intermarché Super",
+   "kind": "Supermarché",
+   "likelihood": "possible",
+   "lat": 49.870076,
+   "lon": 2.361323,
+   "address": "Avenue Henri Barbusse",
+   "addressApprox": false,
+   "website": "https://www.intermarche.com/magasins/01251/longueau-80330/infos-pratiques",
+   "phone": "+33 3 22 46 20 51",
+   "openingHours": "Mo-Sa 08:30-19:30; Su 09:00-12:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Gérard Philipe",
+     "walkM": 47,
+     "lines": [
+      "14"
+     ]
+    },
+    {
+     "name": "La Fourche",
+     "walkM": 137,
+     "lines": [
+      "10",
+      "N1"
+     ]
+    },
+    {
+     "name": "Mairie de Longueau",
+     "walkM": 299,
+     "lines": [
+      "N1"
+     ]
+    },
+    {
+     "name": "Les Alliés",
+     "walkM": 326,
+     "lines": [
+      "10"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 5413,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-6088401930",
+   "name": "Stokomani",
+   "brand": "Stokomani",
+   "kind": "Bazar / déstockage",
+   "likelihood": "possible",
+   "lat": 49.87084,
+   "lon": 2.36846,
+   "address": "12 Rue Claude Chappé, 80330 Longueau",
+   "addressApprox": false,
+   "website": "https://www.stokomani.fr/pages/boutique-stokomani-longueau-80330",
+   "phone": "0825893232",
+   "openingHours": "Mo-Sa 09:00-19:30; Su off",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Croix de Fer",
+     "walkM": 448,
+     "lines": [
+      "N1"
+     ]
+    },
+    {
+     "name": "Gérard Philipe",
+     "walkM": 625,
+     "lines": [
+      "14"
+     ]
+    },
+    {
+     "name": "La Fourche",
+     "walkM": 732,
+     "lines": [
+      "10",
+      "N1"
+     ]
+    },
+    {
+     "name": "Pôle Hôtelier",
+     "walkM": 906,
+     "lines": [
+      "10",
+      "14"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 5824,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-way-64324193",
+   "name": "Intermarché Super",
+   "brand": "Intermarché Super",
+   "kind": "Supermarché",
+   "likelihood": "possible",
+   "lat": 49.862938,
+   "lon": 2.229483,
+   "address": "Route de Taisnil, 80480 Saleux",
+   "addressApprox": false,
+   "website": "https://www.intermarche.com/magasins/01172/saleux-80480/infos-pratiques",
+   "phone": "+33 3 22 95 07 00",
+   "openingHours": "Mo-Sa 08:30-19:30; Su 08:30-12:30",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Saleux",
+     "walkM": 280,
+     "lines": [
+      "11"
+     ]
+    },
+    {
+     "name": "Taisnil",
+     "walkM": 416,
+     "lines": [
+      "11"
+     ]
+    },
+    {
+     "name": "La Grenouillère",
+     "walkM": 591,
+     "lines": [
+      "11"
+     ]
+    },
+    {
+     "name": "Ernest Cauvin",
+     "walkM": 965,
+     "lines": [
+      "11"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 5882,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-6088401889",
+   "name": "Action",
+   "brand": "Action",
+   "kind": "Bazar / déstockage",
+   "likelihood": "possible",
+   "lat": 49.871769,
+   "lon": 2.370067,
+   "address": "20 Avenue de l'Arc, 80330 Longueau",
+   "addressApprox": false,
+   "website": "https://www.action.com/fr-fr/points-de-vente/longueau-20-avenue-de-larc/",
+   "phone": "+33 1 55 56 41 52",
+   "openingHours": "Mo-Sa 08:30-19:30; Su off",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Croix de Fer",
+     "walkM": 546,
+     "lines": [
+      "N1"
+     ]
+    },
+    {
+     "name": "Gérard Philipe",
+     "walkM": 797,
+     "lines": [
+      "14"
+     ]
+    },
+    {
+     "name": "La Fourche",
+     "walkM": 923,
+     "lines": [
+      "10",
+      "N1"
+     ]
+    },
+    {
+     "name": "Pôle Hôtelier",
+     "walkM": 999,
+     "lines": [
+      "10",
+      "14"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 5883,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-10058909034",
+   "name": "Destock 80",
+   "brand": null,
+   "kind": "Bazar / déstockage",
+   "likelihood": "possible",
+   "lat": 49.870188,
+   "lon": 2.371545,
+   "address": "10 Avenue de l'Arc, 80330 Longueau",
+   "addressApprox": false,
+   "website": "https://www.destock-80.fr/",
+   "phone": null,
+   "openingHours": "Mo-Su 09:30-19:00",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Croix de Fer",
+     "walkM": 330,
+     "lines": [
+      "N1"
+     ]
+    },
+    {
+     "name": "Pôle Hôtelier",
+     "walkM": 758,
+     "lines": [
+      "10",
+      "14"
+     ]
+    },
+    {
+     "name": "Gérard Philipe",
+     "walkM": 908,
+     "lines": [
+      "14"
+     ]
+    },
+    {
+     "name": "La Fourche",
+     "walkM": 984,
+     "lines": [
+      "10",
+      "N1"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 6055,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-2517266593",
+   "name": "Intermarché Hyper",
+   "brand": "Intermarché Hyper",
+   "kind": "Hypermarché",
+   "likelihood": "probable",
+   "lat": 49.865652,
+   "lon": 2.375505,
+   "address": "Centre commercial, 80440 Glisy",
+   "addressApprox": false,
+   "website": "https://www.intermarche.com/magasins/10673/glisy-80440/infos-pratiques",
+   "phone": "+33 3 22 38 38 00",
+   "openingHours": "Mo-Sa 08:30-20:45; Su 08:30-12:45",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Centre Commercial Glisy",
+     "walkM": 321,
+     "lines": [
+      "10",
+      "13",
+      "N1"
+     ]
+    },
+    {
+     "name": "Pôle Hôtelier",
+     "walkM": 338,
+     "lines": [
+      "10",
+      "14"
+     ]
+    },
+    {
+     "name": "Capitaine Nemo",
+     "walkM": 421,
+     "lines": [
+      "10",
+      "13",
+      "14",
+      "N1"
+     ]
+    },
+    {
+     "name": "Croix de Fer",
+     "walkM": 575,
+     "lines": [
+      "N1"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 6540,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-5337436948",
+   "name": "Mag Presse",
+   "brand": "Mag Presse",
+   "kind": "Presse",
+   "likelihood": "possible",
+   "lat": 49.866195,
+   "lon": 2.376576,
+   "address": "8 Avenue Philéas Fogg 80440 Glisy",
+   "addressApprox": true,
+   "website": null,
+   "phone": null,
+   "openingHours": null,
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Centre Commercial Glisy",
+     "walkM": 268,
+     "lines": [
+      "10",
+      "13",
+      "N1"
+     ]
+    },
+    {
+     "name": "Capitaine Nemo",
+     "walkM": 406,
+     "lines": [
+      "10",
+      "13",
+      "14",
+      "N1"
+     ]
+    },
+    {
+     "name": "Pôle Hôtelier",
+     "walkM": 462,
+     "lines": [
+      "10",
+      "14"
+     ]
+    },
+    {
+     "name": "Croix de Fer",
+     "walkM": 621,
+     "lines": [
+      "N1"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 6579,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-3776952463",
+   "name": "GiFi",
+   "brand": "GiFi",
+   "kind": "Bazar / déstockage",
+   "likelihood": "possible",
+   "lat": 49.86748,
+   "lon": 2.380173,
+   "address": "3 Avenue Phileas Fogg, 80440 Glisy",
+   "addressApprox": false,
+   "website": "https://magasins.gifi.fr/fr/gifi-amiens-glisy-29861",
+   "phone": "+33 3 22 90 52 72",
+   "openingHours": "Mo-Sa 09:30-19:00; Su off",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Centre Commercial Glisy",
+     "walkM": 375,
+     "lines": [
+      "10",
+      "13",
+      "N1"
+     ]
+    },
+    {
+     "name": "Capitaine Nemo",
+     "walkM": 523,
+     "lines": [
+      "10",
+      "13",
+      "14",
+      "N1"
+     ]
+    },
+    {
+     "name": "Clarins",
+     "walkM": 605,
+     "lines": [
+      "14"
+     ]
+    },
+    {
+     "name": "Etoile du Sud",
+     "walkM": 698,
+     "lines": [
+      "10",
+      "13",
+      "14"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 6743,
+   "stock": "non vérifiable automatiquement"
+  },
+  {
+   "id": "osm-node-3776952464",
+   "name": "Smyths",
+   "brand": "Smyths",
+   "kind": "Magasin de jouets",
+   "likelihood": "probable",
+   "lat": 49.865519,
+   "lon": 2.380055,
+   "address": "Avenue Phileas Fogg, 80440 Glisy",
+   "addressApprox": false,
+   "website": "https://www.smythstoys.com/fr/fr-fr/storefinder/storedetails/amiens_glisy",
+   "phone": null,
+   "openingHours": "Mo-We 09:30-19:00; Th-Sa 09:30-19:30; Su off",
+   "busAccessible": true,
+   "stopsNearby": [
+    {
+     "name": "Centre Commercial Glisy",
+     "walkM": 130,
+     "lines": [
+      "10",
+      "13",
+      "N1"
+     ]
+    },
+    {
+     "name": "Capitaine Nemo",
+     "walkM": 246,
+     "lines": [
+      "10",
+      "13",
+      "14",
+      "N1"
+     ]
+    },
+    {
+     "name": "Etoile du Sud",
+     "walkM": 456,
+     "lines": [
+      "10",
+      "13",
+      "14"
+     ]
+    },
+    {
+     "name": "Clarins",
+     "walkM": 504,
+     "lines": [
+      "14"
+     ]
+    }
+   ],
+   "distanceFromCenterM": 6834,
+   "stock": "non vérifiable automatiquement"
+  }
+ ]
+}

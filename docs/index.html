@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PokéVeille Amiens</title>
+  <meta name="description" content="Veille gratuite des offres de cartes Pokémon : boutiques en ligne, bons plans et magasins d'Amiens accessibles en bus.">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand"><span class="dot" aria-hidden="true"></span>PokéVeille</div>
+    <nav role="tablist">
+      <button role="tab" data-tab="offres" aria-selected="true">Offres</button>
+      <button role="tab" data-tab="magasins">Magasins</button>
+      <button role="tab" data-tab="recherches">Mes recherches</button>
+      <button role="tab" data-tab="alertes">Alertes</button>
+      <button role="tab" data-tab="etat">État</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div id="load-error" class="notice hidden"></div>
+
+  <!-- OFFRES -->
+  <section id="tab-offres">
+    <div class="panel">
+      <div class="filters">
+        <label class="f">Recherche enregistrée
+          <select id="f-search"><option value="">— Aucune (filtres libres) —</option></select>
+        </label>
+        <label class="f">Mots-clés (produit, extension)
+          <input type="search" id="f-q" placeholder="ex. chaos ascendant, ME05">
+        </label>
+        <label class="f">Prix maximum (€)
+          <input type="number" id="f-max" min="0" step="1" placeholder="sans limite">
+        </label>
+        <label class="f">Boutique
+          <select id="f-source"><option value="">Toutes</option></select>
+        </label>
+      </div>
+      <h3>Type</h3>
+      <div class="checks" id="f-types"></div>
+      <h3>Langue</h3>
+      <div class="checks" id="f-langs"></div>
+      <h3>Disponibilité et canal</h3>
+      <div class="checks">
+        <label><input type="checkbox" id="f-onlyavail" checked> Seulement disponible / précommande</label>
+        <label><input type="checkbox" id="f-online" checked> Boutiques en ligne</label>
+        <label><input type="checkbox" id="f-deals" checked> Bons plans Dealabs</label>
+        <label><input type="checkbox" id="f-promo"> En promotion uniquement</label>
+      </div>
+    </div>
+    <div class="summary" id="offers-summary"></div>
+    <div class="list" id="offers"></div>
+    <div class="row" style="justify-content:center;margin-top:12px"><button class="btn hidden" id="more">Afficher plus</button></div>
+  </section>
+
+  <!-- MAGASINS -->
+  <section id="tab-magasins" class="hidden">
+    <div class="notice">Ces magasins vendent <b>probablement</b> ou <b>parfois</b> des cartes Pokémon, mais <b>leur stock en rayon n'est pas consultable automatiquement</b> : aucune source ouverte et autorisée ne le publie. Appelez ou passez avant de vous déplacer.</div>
+    <div class="panel">
+      <div class="filters">
+        <label class="f">Point de départ (adresse, rue, code postal)
+          <input type="search" id="m-addr" placeholder="ex. 12 rue de Noyon, Amiens">
+        </label>
+        <label class="f">Rayon
+          <select id="m-radius"><option value="2">2 km</option><option value="5">5 km</option><option value="10">10 km</option><option value="15" selected>15 km</option></select>
+        </label>
+        <label class="f">Marche max. depuis l'arrêt de bus
+          <select id="m-walk"><option value="400">5 min (~400 m)</option><option value="800">10 min (~800 m)</option><option value="1200" selected>15 min (~1,2 km)</option></select>
+        </label>
+        <label class="f">Type de magasin
+          <select id="m-like"><option value="">Tous</option><option value="probable">Vente probable</option></select>
+        </label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary" id="m-go">Chercher</button>
+        <button class="btn" id="m-geo">📍 Ma position</button>
+        <span class="small muted" id="m-from"></span>
+      </div>
+    </div>
+    <div id="map"></div>
+    <div class="list" id="stores"></div>
+    <p class="small muted" id="stores-attrib"></p>
+  </section>
+
+  <!-- RECHERCHES -->
+  <section id="tab-recherches" class="hidden">
+    <div class="panel">
+      <h2>Mes recherches</h2>
+      <p class="muted small">Chaque recherche a ses propres critères et ses propres alertes Discord. Modifiez-les ici, puis cliquez sur « Enregistrer sur GitHub » : les vérifications automatiques utiliseront la nouvelle version dès le passage suivant.</p>
+      <div id="searches"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" id="s-add">+ Nouvelle recherche</button>
+        <button class="btn primary" id="s-save">Enregistrer sur GitHub</button>
+        <span class="small warn hidden" id="s-dirty">Modifications non enregistrées sur GitHub</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ALERTES -->
+  <section id="tab-alertes" class="hidden">
+    <div class="panel">
+      <h2>Dernières alertes</h2>
+      <div id="alerts"></div>
+    </div>
+  </section>
+
+  <!-- ETAT -->
+  <section id="tab-etat" class="hidden">
+    <div class="panel">
+      <h2>Dernière vérification</h2>
+      <div id="status"></div>
+    </div>
+    <div class="panel">
+      <h2>Ce que l'application couvre (et ne couvre pas)</h2>
+      <ul class="small">
+        <li><b>Stock réel vérifié</b> : boutiques en ligne qui publient leur catalogue public (Shopify, WooCommerce) et livrent en France. Leur disponibilité est relevée à chaque passage.</li>
+        <li><b>Bons plans Dealabs</b> : offres signalées par la communauté (y compris Fnac, Leclerc, Carrefour, Amazon). Utile pour les promotions, mais <b>le stock n'est pas vérifié</b>.</li>
+        <li><b>Magasins physiques d'Amiens</b> : découverts via OpenStreetMap et le réseau Ametis. Adresse, distance et arrêts de bus sont affichés, mais <b>le stock en magasin n'est pas vérifiable</b>.</li>
+        <li><b>Non couverts</b> : les sites des grandes enseignes (Fnac, Cultura, Leclerc, Carrefour, Auchan, King Jouet, Amazon…) sont protégés contre les robots ou interdisent l'extraction automatique. L'application ne contourne pas ces protections.</li>
+        <li>Fréquence : environ toutes les 15 minutes, souvent un peu plus (GitHub peut retarder ou sauter des passages planifiés aux heures chargées).</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<dialog id="edit-dlg">
+  <form method="dialog" id="edit-form">
+    <h2 id="edit-title">Recherche</h2>
+    <div class="filters">
+      <label class="f">Nom<input type="text" name="sname" required></label>
+      <label class="f">Prix maximum (€)<input type="number" name="maxPrice" min="0" step="0.01" placeholder="sans limite"></label>
+    </div>
+    <label class="f" style="margin-top:10px">Mots-clés : une expression par ligne, au moins une doit correspondre (laisser vide = tous les produits)
+      <textarea name="keywords" style="min-height:60px" placeholder="chaos ascendant&#10;nuit noire"></textarea></label>
+    <label class="f" style="margin-top:10px">Mots à exclure (un par ligne)
+      <textarea name="excludeKeywords" style="min-height:44px" placeholder="défaut scellage"></textarea></label>
+    <h3>Types</h3><div class="checks" id="e-types"></div>
+    <h3>Langues</h3><div class="checks" id="e-langs"></div>
+    <div class="checks" style="margin-top:6px"><label><input type="checkbox" name="allowUnknownLanguage"> Inclure les produits dont la langue n'est pas précisée</label></div>
+    <h3>Boutiques (aucune cochée = toutes)</h3><div class="checks" id="e-sources"></div>
+    <label class="f" style="margin-top:6px">Enseignes des bons plans (une par ligne, ex. Leclerc, Fnac — vide = toutes)
+      <textarea name="merchants" style="min-height:44px"></textarea></label>
+    <h3>Options</h3>
+    <div class="checks">
+      <label><input type="checkbox" name="online"> Boutiques en ligne</label>
+      <label><input type="checkbox" name="deal"> Bons plans Dealabs</label>
+      <label><input type="checkbox" name="includePreorder"> Précommandes</label>
+      <label><input type="checkbox" name="promoOnly"> Promotions uniquement</label>
+      <label><input type="checkbox" name="notify"> Alertes Discord</label>
+      <label><input type="checkbox" name="enabled"> Recherche active</label>
+    </div>
+    <div class="row" style="margin-top:14px;justify-content:space-between">
+      <button class="btn" value="delete" id="e-delete" formnovalidate>Supprimer</button>
+      <div class="row">
+        <button class="btn" value="preview">Voir les offres</button>
+        <button class="btn" value="cancel" formnovalidate>Annuler</button>
+        <button class="btn primary" value="ok">Valider</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="save-dlg">
+  <h2>Enregistrer vos recherches sur GitHub</h2>
+  <ol class="small">
+    <li>Cliquez sur <b>Copier</b>.</li>
+    <li>Cliquez sur <b>Ouvrir l'éditeur GitHub</b> (connectez-vous si besoin).</li>
+    <li>Dans l'éditeur : <b>Ctrl+A</b> puis <b>Ctrl+V</b> (sur téléphone : tout sélectionner, coller).</li>
+    <li>Cliquez sur <b>Commit changes…</b> puis à nouveau <b>Commit changes</b>.</li>
+  </ol>
+  <textarea id="save-json" readonly></textarea>
+  <div class="row" style="margin-top:10px;justify-content:flex-end">
+    <button class="btn" id="save-copy">Copier</button>
+    <a class="btn primary" id="save-open" target="_blank" rel="noopener">Ouvrir l'éditeur GitHub</a>
+    <button class="btn" id="save-close">Fermer</button>
+  </div>
+</dialog>
+
+<footer>
+  Données : catalogues publics des boutiques, Dealabs (RSS), © contributeurs OpenStreetMap, réseau Ametis (transport.data.gouv.fr), Géoplateforme IGN.
+  Application personnelle, sans achat automatique. Les prix et stocks peuvent changer entre deux vérifications : vérifiez toujours sur le site.
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+name: Maintenance (magasins et tests)
+
+on:
+  schedule:
+    - cron: '17 4 1 * *'   # le 1er de chaque mois
+  push:
+    branches: [main]
+    paths: ['src/**', 'docs/shared/**', 'test/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+
+  stores:
+    # Rafraîchit la liste des magasins (OpenStreetMap + arrêts Ametis) et garde le dépôt actif
+    if: github.event_name != 'push'
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Télécharger le GTFS Ametis (transport.data.gouv.fr)
+        run: |
+          URL=$(curl -s https://transport.data.gouv.fr/api/datasets/ametis | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const d=JSON.parse(s);const r=d.resources.find(r=>r.format==='GTFS'&&/GTFS-RT/.test(r.title))||d.resources.find(r=>r.format==='GTFS');console.log(r.original_url||r.url)})")
+          echo "GTFS: $URL"
+          curl -sL "$URL" -o gtfs.zip
+          mkdir -p .gtfs && unzip -q -o gtfs.zip -d .gtfs
+      - run: node src/discover-stores.js --gtfs .gtfs
+      - name: Enregistrer
+        run: |
+          git config user.name "pokeveille-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          date -u +%Y-%m-%d > .github/last-maintenance
+          git add docs/data/stores.json .github/last-maintenance
+          git commit -m "Mise à jour mensuelle des magasins" || echo "Rien à mettre à jour"
+          git push

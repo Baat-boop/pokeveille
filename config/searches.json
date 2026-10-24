@@ -1,0 +1,55 @@
+{
+  "searches": [
+    {
+      "id": "etb-coffrets-fr",
+      "name": "ETB et coffrets en français",
+      "enabled": true,
+      "notify": true,
+      "keywords": [],
+      "excludeKeywords": [],
+      "types": ["etb", "coffret"],
+      "languages": ["fr"],
+      "allowUnknownLanguage": true,
+      "maxPrice": null,
+      "retailers": [],
+      "channels": ["online", "deal"],
+      "includePreorder": true,
+      "includeDeals": true,
+      "promoOnly": false
+    },
+    {
+      "id": "displays-fr",
+      "name": "Displays en français",
+      "enabled": true,
+      "notify": true,
+      "keywords": [],
+      "excludeKeywords": [],
+      "types": ["display"],
+      "languages": ["fr"],
+      "allowUnknownLanguage": true,
+      "maxPrice": null,
+      "retailers": [],
+      "channels": ["online", "deal"],
+      "includePreorder": true,
+      "includeDeals": true,
+      "promoOnly": false
+    },
+    {
+      "id": "boosters-fr",
+      "name": "Boosters, blisters et tripacks en français",
+      "enabled": true,
+      "notify": true,
+      "keywords": [],
+      "excludeKeywords": [],
+      "types": ["booster"],
+      "languages": ["fr"],
+      "allowUnknownLanguage": true,
+      "maxPrice": null,
+      "retailers": [],
+      "channels": ["online", "deal"],
+      "includePreorder": true,
+      "includeDeals": true,
+      "promoOnly": false
+    }
+  ]
+}
