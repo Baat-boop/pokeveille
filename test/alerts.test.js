@@ -122,7 +122,7 @@ test('produit à venir : annonce quand il est référencé, puis alerte dès qu�
   t.catalog = [product(6, 'ETB Règne Delta ME06 FR - 6 novembre 2026', false)];
   const listed = await t.run();
   assert.deepEqual(listed.alerts.map(a => a.kind), ['listed']);
-  assert.equal(listed.embeds[0].author.name, '📣 À venir : produit référencé, pas encore en vente');
+  assert.equal(listed.embeds[0].author.name, '📣 Nouveau en boutique, pas encore commandable');
   assert.match(listed.embeds[0].description, /Sortie indiquée :\*\* 06\/11\/2026/);
   t.advance(15);
   assert.equal((await t.run()).messages.length, 0, 'toujours pas en vente : pas de doublon');

@@ -106,16 +106,15 @@ function renderUpcoming() {
     }).join('') || '<p class="muted">Aucune sortie à venir dans le calendrier.</p>';
     $('#rel-sources').innerHTML = 'Sources : ' + rel.sources.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a>`).join(' · ');
   }
-  const cutoff = Date.now() - 45 * 864e5;
   const fr = $('#u-fr').checked, sealed = $('#u-sealed').checked;
-  // keywords of releases still to come (some shops list a product months before it comes out)
+  // Shopify's publication date is reset when a shop re-publishes an old product, so it is NOT used here.
+  // Upcoming = preorder, a future release date written in the title, or a product of a future release in the calendar.
   const futureKw = (rel?.releases ?? []).filter(r => (r.date.length === 10 ? r.date : r.date + '-28') >= today).flatMap(r => r.keywords ?? []);
-  const upcomingByCalendar = o => o.status !== 'disponible' && futureKw.some(k => containsPhrase(norm(o.title), k));
-  const up = S.offers.filter(o => o.channel === 'online' && !o.removed
-    && (o.status === 'precommande' || (o.status === 'rupture' && o.listedAt && Date.parse(o.listedAt) >= cutoff) || (o.releaseHint && o.releaseHint >= today.slice(0, 7)) || upcomingByCalendar(o))
+  const up = S.offers.filter(o => o.channel === 'online' && !o.removed && o.status !== 'disponible'
+    && (o.status === 'precommande' || (o.releaseHint && o.releaseHint >= today.slice(0, o.releaseHint.length)) || futureKw.some(k => containsPhrase(norm(o.title), k)))
     && (!fr || o.lang === 'fr' || o.lang == null) && (!sealed || SEALED.includes(o.type)))
-    .sort((a, b) => Date.parse(b.listedAt ?? 0) - Date.parse(a.listedAt ?? 0));
-  $('#upcoming').innerHTML = up.length ? up.slice(0, 80).map(o => offerCard(o, true)).join('') : '<p class="muted">Rien de nouveau référencé ces 45 derniers jours.</p>';
+    .sort((a, b) => (a.status === 'precommande' ? 0 : 1) - (b.status === 'precommande' ? 0 : 1) || a.title.localeCompare(b.title, 'fr'));
+  $('#upcoming').innerHTML = up.length ? up.slice(0, 80).map(offerCard).join('') : '<p class="muted">Rien de nouveau référencé ces 45 derniers jours.</p>';
 }
 document.addEventListener('click', e => {
   const kw = e.target.closest?.('[data-kw]')?.dataset.kw;
@@ -179,7 +178,7 @@ function currentFilter() {
   };
 }
 
-function offerCard(o, showListed = false) {
+function offerCard(o) {
   const statusCls = o.channel === 'deal' ? 's-deal' : `s-${o.status}`;
   const statusTxt = o.channel === 'deal' ? 'Bon plan signalé · stock non vérifié' : STATUS[o.status];
   const shop = o.merchant ? `${esc(o.merchant)} <span class="muted">(via Dealabs)</span>` : esc(o.sourceName);
@@ -197,9 +196,7 @@ function offerCard(o, showListed = false) {
         <span>${esc(TYPES[o.type] ?? o.type)}</span>
         <span>${o.lang ? esc(LANGS[o.lang]) + (o.langGuessed ? ' (déduit)' : '') : 'Langue non précisée'}</span>
         ${o.setCode ? `<span>${esc(o.setCode)}</span>` : ''}
-        ${o.releaseHint ? `<span><b>Sortie : ${esc(day(o.releaseHint))}</b></span>` : ''}
-        ${showListed && o.listedAt ? `<span>Référencé ${ago(o.listedAt)}</span>` : ''}
-        <span title="${esc(when(o.checkedAt))}">${o.channel === 'deal' ? `Posté ${ago(o.postedAt)}` : `Vérifié ${ago(o.checkedAt)}`}</span>
+        ${o.releaseHint ? `<span><b>Sortie : ${esc(day(o.releaseHint))}</b></span>` : ''}        <span title="${esc(when(o.checkedAt))}">${o.channel === 'deal' ? `Posté ${ago(o.postedAt)}` : `Vérifié ${ago(o.checkedAt)}`}</span>
       </div>
       ${notes.length ? `<div class="meta">${notes.join(' ')}</div>` : ''}
     </div>

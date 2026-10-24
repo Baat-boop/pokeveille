@@ -4,7 +4,7 @@ import { TYPES, LANGS } from '../../docs/shared/classify.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const COLORS = { restock: 0x2ecc71, new: 0x3498db, deal: 0x9b59b6, listed: 0xe67e22, digest: 0x95a5a6 };
-const HEADLINES = { restock: '🟢 Retour en stock', new: '🆕 Nouvelle offre disponible', deal: '💡 Bon plan signalé', listed: '📣 À venir : produit référencé, pas encore en vente' };
+const HEADLINES = { restock: '🟢 Retour en stock', new: '🆕 Nouvelle offre disponible', deal: '💡 Bon plan signalé', listed: '📣 Nouveau en boutique, pas encore commandable' };
 
 const euro = v => (v == null ? 'prix non affiché' : `${v.toFixed(2).replace('.', ',')} €`);
 const paris = iso => new Date(iso).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'short', timeStyle: 'short' });
