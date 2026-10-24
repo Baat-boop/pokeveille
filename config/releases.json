@@ -1,0 +1,24 @@
+{
+  "updatedAt": "2026-10-24",
+  "note": "Calendrier des sorties françaises, relevé à la main à partir de sources publiques (dates indicatives, souvent issues des distributeurs et pas toujours confirmées par Pokémon). Modifiable comme searches.json.",
+  "sources": [
+    { "name": "LeBooster — calendrier des sorties", "url": "https://lebooster.fr/guides/calendrier-sorties-pokemon" },
+    { "name": "Pokécardex — calendrier FR (forum)", "url": "https://www.pokecardex.com/forums/viewtopic.php?t=49894" },
+    { "name": "VCOLLECT — calendrier des sorties", "url": "https://vcollect.fr/pages/calendrier-sorties-pokemon" },
+    { "name": "Site officiel Pokémon France — JCC", "url": "https://www.pokemon.com/fr/jcc-pokemon" }
+  ],
+  "releases": [
+    { "date": "2026-10-23", "name": "Collection classeur 30e Anniversaire (classeur + 5 boosters)", "type": "coffret", "price": 45.99, "confirmed": false, "keywords": ["classeur 30 anniversaire"] },
+    { "date": "2026-10-24", "name": "Avant-premières Règne Delta en boutique + Boîtier Stratégies et Combats", "type": "coffret", "confirmed": false, "keywords": ["regne delta strategies", "regne delta avant premiere"] },
+    { "date": "2026-10-30", "name": "Decks de combat 30e Anniversaire Mentali-ex et Noctali-ex (date du 6/11 selon d'autres sources)", "type": "coffret", "price": 24.99, "confirmed": false, "keywords": ["deck mentali", "deck noctali"] },
+    { "date": "2026-11-06", "name": "Règne Delta (ME06) — sortie de l'extension", "type": "extension", "confirmed": true, "keywords": ["regne delta", "me06"] },
+    { "date": "2026-11-06", "name": "Règne Delta — ETB (Coffret Dresseur d'Élite)", "type": "etb", "price": 55.99, "confirmed": false, "keywords": ["etb regne delta", "etb me06"] },
+    { "date": "2026-11-06", "name": "Règne Delta — boosters, bundle 6 boosters, display", "type": "booster", "confirmed": false, "keywords": ["booster regne delta", "display regne delta", "bundle regne delta"] },
+    { "date": "2026-11-06", "name": "Collections Ultra-Premium 30e Anniversaire (Journée / Soirée)", "type": "coffret", "price": 229.99, "confirmed": false, "keywords": ["ultra premium 30 anniversaire"] },
+    { "date": "2026-11-06", "name": "Collection Premium Métamorph 30e Anniversaire", "type": "coffret", "price": 49.99, "confirmed": false, "keywords": ["metamorph 30 anniversaire", "collection premium metamorph"] },
+    { "date": "2026-11-06", "name": "Collections figurine Mew et Mewtwo 30e Anniversaire (Mewtwo le 27/11 selon une source)", "type": "coffret", "price": 37.99, "confirmed": false, "keywords": ["figurine mew 30 anniversaire", "figurine mewtwo"] },
+    { "date": "2026-11-13", "name": "Collections autocollants 30e Anniversaire Lucario et Noadkoko d'Alola", "type": "coffret", "price": 19.99, "confirmed": false, "keywords": ["autocollant lucario", "autocollant noadkoko"] },
+    { "date": "2026-12-04", "name": "Dernière vague 30e Anniversaire (contenu non annoncé)", "type": "coffret", "confirmed": false, "keywords": ["30 anniversaire"] },
+    { "date": "2027-03", "dateLabel": "début 2027 (estimation)", "name": "Prochaine extension française (basée sur la japonaise « Aura Seeker ») — nom et date non annoncés", "type": "extension", "confirmed": false, "keywords": [] }
+  ]
+}

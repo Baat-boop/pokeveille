@@ -114,17 +114,36 @@ test('nouvelle offre disponible correspondant aux critères', async () => {
   assert.equal(r.embeds[0].author.name, '🆕 Nouvelle offre disponible');
 });
 
-test('nouvelle offre en rupture : pas d’alerte, puis alerte quand elle arrive en stock', async () => {
+test('produit à venir : annonce quand il est référencé, puis alerte dès qu’il devient commandable', async () => {
   const t = setup([ETB_FR]);
   t.catalog = [];
   await t.run();
   t.advance(15);
-  t.catalog = [product(6, 'ETB Règne Delta ME06 FR', false)];
+  t.catalog = [product(6, 'ETB Règne Delta ME06 FR - 6 novembre 2026', false)];
+  const listed = await t.run();
+  assert.deepEqual(listed.alerts.map(a => a.kind), ['listed']);
+  assert.equal(listed.embeds[0].author.name, '📣 À venir : produit référencé, pas encore en vente');
+  assert.match(listed.embeds[0].description, /Sortie indiquée :\*\* 06\/11\/2026/);
+  t.advance(15);
+  assert.equal((await t.run()).messages.length, 0, 'toujours pas en vente : pas de doublon');
+  t.advance(5);
+  t.catalog = [product(6, 'ETB Règne Delta ME06 FR - 6 novembre 2026', true)];
+  const r = await t.run();
+  assert.deepEqual(r.alerts.map(a => a.kind), ['new'], 'commandable : alerte immédiate, sans délai anti-rebond');
+  t.advance(15);
   assert.equal((await t.run()).messages.length, 0);
+});
+
+test('annonce des produits à venir désactivable', async () => {
+  const t = setup([{ ...ETB_FR, notifyListed: false }]);
+  t.catalog = [];
+  await t.run();
+  t.advance(15);
+  t.catalog = [product(6, 'ETB Règne Delta ME06 FR', false)];
+  assert.equal((await t.run()).alerts.length, 0);
   t.advance(15);
   t.catalog = [product(6, 'ETB Règne Delta ME06 FR', true)];
-  const r = await t.run();
-  assert.equal(r.alerts[0].kind, 'restock');
+  assert.equal((await t.run()).alerts[0].kind, 'restock');
 });
 
 test('nouvelle rupture puis retour : alerte à nouveau (après le délai anti-rebond d’une heure)', async () => {

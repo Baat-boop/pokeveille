@@ -53,7 +53,7 @@ export function mergeOffers(prevOffers, runs, now) {
   return out;
 }
 
-const KIND_RANK = { restock: 3, new: 2, deal: 1 };
+const KIND_RANK = { restock: 3, new: 2, deal: 1, listed: 0 };
 
 /**
  * Decide alerts. Rules:
@@ -116,6 +116,8 @@ export function computeAlerts({ prevOffers, offers, runs, searches, state, now }
 
       if (o.removed || o.status === 'rupture') {
         if (entry) entry.armed = true;
+        // A product that appears in a catalogue before it can be bought: announce it (upcoming release).
+        else if (!silent && !o.removed && !prevOffers[o.key] && s.notifyListed !== false && o.channel === 'online') add('listed', o, s.id);
         continue;
       }
       if (o.channel === 'deal') {
@@ -136,7 +138,7 @@ export function computeAlerts({ prevOffers, offers, runs, searches, state, now }
         add(wasOut ? 'restock' : 'new', o, s.id);
       } else if (entry.armed) {
         if (now - entry.at < RESTOCK_COOLDOWN_MS) continue;
-        add('restock', o, s.id);
+        add(entry.listedAt ? 'new' : 'restock', o, s.id);
       }
     }
   }
@@ -147,7 +149,7 @@ export function computeAlerts({ prevOffers, offers, runs, searches, state, now }
     if (!activeIds.has(sid) || !offers[rest.join('|')]) delete next.notified[k];
   }
 
-  const order = { restock: 0, new: 1, deal: 2 };
+  const order = { restock: 0, new: 1, deal: 2, listed: 3 };
   const alerts = [...byOffer.values()].sort((a, b) => order[a.kind] - order[b.kind] || (a.offer.price ?? 1e9) - (b.offer.price ?? 1e9));
   return { alerts, digests, state: next };
 }
@@ -155,6 +157,9 @@ export function computeAlerts({ prevOffers, offers, runs, searches, state, now }
 /** Call once an alert has been delivered, so it is never repeated for an unchanged offer. */
 export function markSent(state, alert, now) {
   for (const sid of alert.searchIds) {
-    state.notified[`${sid}|${alert.offer.key}`] = { at: now, status: alert.offer.status, price: alert.offer.price, armed: false };
+    state.notified[`${sid}|${alert.offer.key}`] = alert.kind === 'listed'
+      // announced but not buyable yet: stay armed so the first availability triggers a "restock" alert right away
+      ? { at: 0, status: alert.offer.status, price: alert.offer.price, armed: true, listedAt: now }
+      : { at: now, status: alert.offer.status, price: alert.offer.price, armed: false };
   }
 }

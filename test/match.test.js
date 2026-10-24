@@ -32,6 +32,16 @@ test('mots-clés : au moins une expression, tous ses mots, accents ignorés', ()
   assert.ok(!matchOffer(offer(), { keywords: ['ascendant'], excludeKeywords: ['display'] }));
 });
 
+test('synonymes : 30e anniversaire = 30 ans = 30th celebration, ETB = coffret dresseur d’élite', () => {
+  for (const title of ['Mini Tin – 30 Ans Pokémon', 'Bundle - 30e Anniversaire - Français', 'Bundle Pokémon - 30ème Anniversaire', 'Set Complet 9 Coffrets First Partners – Pokémon 30th Celebration']) {
+    assert.ok(matchOffer(offer({ title }), { keywords: ['30 anniversaire'] }), title);
+    assert.ok(matchOffer(offer({ title }), { keywords: ['30 ans'] }), title);
+  }
+  assert.ok(!matchOffer(offer({ title: 'Valisette Pokémon 25 Ans Anniversaire' }), { keywords: ['30 ans'] }));
+  assert.ok(matchOffer(offer({ title: "Coffret Dresseur d'Élite - Nuit Noire" }), { keywords: ['etb nuit noire'] }));
+  assert.ok(matchOffer(offer({ title: 'ETB Nuit Noire ME05' }), { keywords: ["coffret dresseur d'élite nuit noire"] }));
+});
+
 test('enseignes, canal et promotions', () => {
   assert.ok(matchOffer(offer(), { retailers: ['pokemanias'] }));
   assert.ok(!matchOffer(offer(), { retailers: ['hikaru'] }));

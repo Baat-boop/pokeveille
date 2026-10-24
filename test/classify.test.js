@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyProduct, detectType, detectLanguage } from '../docs/shared/classify.js';
+import { classifyProduct, detectType, detectLanguage, detectReleaseHint } from '../docs/shared/classify.js';
 
 const c = (title, source = {}, secondary = '') => classifyProduct({ title, secondary, source });
 
@@ -50,6 +50,13 @@ test('produits non Pokémon exclus', () => {
   assert.equal(c('Display One Piece OP-12 Japonais'), null);
   assert.equal(c('Display Riftbound Vendetta - SET 4 US', { pokemonOnly: true }), null);
   assert.notEqual(c('Display Pokémon Chaos Ascendant ME04 (FR)'), null);
+});
+
+test('date de sortie lue dans le titre', () => {
+  assert.equal(detectReleaseHint('Duopack Ectoplasma - FR - Pack 2 Boosters Octobre 2026 [ME05]'), '2026-10');
+  assert.equal(detectReleaseHint('ETB Règne Delta (sortie le 06/11/2026)'), '2026-11-06');
+  assert.equal(detectReleaseHint('Coffret Premium - 6 novembre 2026'), '2026-11-06');
+  assert.equal(detectReleaseHint('ETB Nuit Noire ME05'), null);
 });
 
 test('précommande détectée', () => {

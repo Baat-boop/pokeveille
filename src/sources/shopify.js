@@ -1,6 +1,6 @@
 // Shopify shops publish their public catalogue (with per-variant "available") at /products.json.
 import { politeJson } from '../http.js';
-import { classifyProduct } from '../../docs/shared/classify.js';
+import { classifyProduct, detectReleaseHint } from '../../docs/shared/classify.js';
 import { decodeEntities, parsePrice } from '../../docs/shared/text.js';
 
 const MAX_PAGES = 30;
@@ -46,6 +46,8 @@ export function shopifyToOffers(p, source) {
       lang: vCls.lang,
       langGuessed: vCls.langGuessed,
       setCode: vCls.setCode,
+      listedAt: p.published_at || p.created_at || null,
+      releaseHint: detectReleaseHint(title),
     };
   });
 }

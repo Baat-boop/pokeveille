@@ -86,6 +86,22 @@ export function detectSetCode(text) {
   return m ? (m[1] + m[2]).toUpperCase() : null;
 }
 
+const MONTHS = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin', 'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre'];
+/**
+ * Release date written in a title, e.g. "Pack 2 Boosters Octobre 2026", "sortie le 06/11/2026", "(6 novembre 2026)".
+ * Returns "YYYY-MM" or "YYYY-MM-DD", or null.
+ */
+export function detectReleaseHint(title) {
+  const t = norm(title);
+  let m = t.match(/\b(\d{1,2}) (janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre) (20\d\d)\b/);
+  if (m) return `${m[3]}-${String(MONTHS.indexOf(m[2]) + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  m = t.match(/\b(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre) (20\d\d)\b/);
+  if (m) return `${m[2]}-${String(MONTHS.indexOf(m[1]) + 1).padStart(2, '0')}`;
+  m = String(title).match(/\b(?:sortie|dispo\w*|release)\D{0,12}(\d{1,2})[/.](\d{1,2})[/.](20\d\d)\b/i);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return null;
+}
+
 /**
  * Fallback when the title states no language.
  * Japanese set codes (SV8, M2, S12A...) imply a Japanese product; French codes (EV, EB, SL),

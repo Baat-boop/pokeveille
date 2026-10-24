@@ -1,7 +1,7 @@
 // PokéVeille web page: reads the data published by the scheduled checker (GitHub "data" branch)
 // and the configuration (main branch). Everything here runs in the browser; nothing is sent anywhere
 // except the address you type, which goes to the free IGN geocoder to compute distances.
-import { norm } from './shared/text.js';
+import { norm, containsPhrase } from './shared/text.js';
 import { TYPES, LANGS } from './shared/classify.js';
 import { matchOffer, STATUS, CHANNELS } from './shared/match.js';
 import { haversineM, walkMinutes, formatDistance } from './shared/geo.js';
@@ -48,7 +48,13 @@ function ago(iso) {
   return `il y a ${Math.round(h / 24)} j`;
 }
 const when = iso => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—');
-const KIND_LABEL = { restock: '🟢 Retour en stock', new: '🆕 Nouvelle offre', deal: '💡 Bon plan' };
+const KIND_LABEL = { restock: '🟢 Retour en stock', new: '🆕 Nouvelle offre', deal: '💡 Bon plan', listed: '📣 Produit à venir' };
+const SEALED = ['etb', 'display', 'coffret', 'booster'];
+const day = iso => {
+  const [y, m, d] = iso.split('-');
+  return d ? new Date(+y, m - 1, +d).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
+    : new Date(+y, m - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+};
 
 // ---------- state ----------
 const S = { offers: [], status: null, alerts: [], sources: [], configSearches: [], searches: [], stores: null, shown: 60 };
@@ -60,7 +66,58 @@ function showTab(name) {
   document.querySelectorAll('main > section').forEach(s => s.classList.toggle('hidden', s.id !== `tab-${name}`));
   local.set('pv-tab', name);
   if (name === 'magasins') renderStores();
+  if (name === 'avenir') renderUpcoming();
 }
+
+// ---------- upcoming releases ----------
+function showInOffers(keyword) {
+  showTab('offres');
+  $('#f-search').value = '';
+  $('#f-q').value = keyword;
+  $('#f-onlyavail').checked = false;
+  document.querySelectorAll('#f-types input').forEach(i => (i.checked = true));
+  S.shown = 60;
+  renderOffers();
+}
+function renderUpcoming() {
+  const rel = S.releases;
+  const today = new Date().toISOString().slice(0, 10);
+  const frOffers = S.offers.filter(o => o.channel === 'online' && !o.removed && (o.lang === 'fr' || o.lang == null));
+  if (rel) {
+    const recentCut = new Date(Date.now() - 21 * 864e5).toISOString().slice(0, 10);
+    const items = rel.releases.filter(r => r.date >= recentCut).sort((a, b) => a.date.localeCompare(b.date));
+    $('#rel-note').textContent = `${rel.note} Relevé le ${new Date(rel.updatedAt).toLocaleDateString('fr-FR')}.`;
+    $('#releases').innerHTML = items.map(r => {
+      const matches = frOffers.filter(o => r.keywords?.some(k => containsPhrase(norm(o.title), k)));
+      const buyable = matches.filter(o => o.status === 'disponible' || o.status === 'precommande').length;
+      const past = (r.date.length === 10 ? r.date : r.date + '-28') < today;
+      return `<article class="card store"${past ? ' style="opacity:.6"' : ''}>
+        <div>
+          <div class="t">${esc(r.name)}</div>
+          <div class="meta">
+            <span><b>${esc(r.dateLabel ?? day(r.date))}</b>${past ? ' · sorti' : ''}</span>
+            <span class="badge ${r.confirmed ? 's-disponible' : 's-precommande'}">${r.confirmed ? 'Date confirmée' : 'Date à confirmer'}</span>
+            <span>${esc(TYPES[r.type] ?? (r.type === 'extension' ? 'Extension' : r.type))}</span>
+            ${matches.length ? `<a href="#" data-kw="${esc(r.keywords[0])}">${matches.length} fiche(s) en boutique, dont ${buyable} commandable(s)</a>` : '<span>Pas encore référencé dans les boutiques suivies</span>'}
+          </div>
+        </div>
+        <div class="price">${r.price ? `≈ ${euro(r.price)}<s style="text-decoration:none">prix conseillé</s>` : ''}</div>
+      </article>`;
+    }).join('') || '<p class="muted">Aucune sortie à venir dans le calendrier.</p>';
+    $('#rel-sources').innerHTML = 'Sources : ' + rel.sources.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a>`).join(' · ');
+  }
+  const cutoff = Date.now() - 45 * 864e5;
+  const fr = $('#u-fr').checked, sealed = $('#u-sealed').checked;
+  const up = S.offers.filter(o => o.channel === 'online' && !o.removed
+    && (o.status === 'precommande' || (o.status === 'rupture' && o.listedAt && Date.parse(o.listedAt) >= cutoff) || (o.releaseHint && o.releaseHint >= today.slice(0, 7)))
+    && (!fr || o.lang === 'fr' || o.lang == null) && (!sealed || SEALED.includes(o.type)))
+    .sort((a, b) => Date.parse(b.listedAt ?? 0) - Date.parse(a.listedAt ?? 0));
+  $('#upcoming').innerHTML = up.length ? up.slice(0, 80).map(o => offerCard(o, true)).join('') : '<p class="muted">Rien de nouveau référencé ces 45 derniers jours.</p>';
+}
+document.addEventListener('click', e => {
+  const kw = e.target.closest?.('[data-kw]')?.dataset.kw;
+  if (kw) { e.preventDefault(); showInOffers(kw); }
+});
 
 // ---------- offers ----------
 const DEFAULT_TYPES = ['etb', 'display', 'coffret', 'booster'];
@@ -119,7 +176,7 @@ function currentFilter() {
   };
 }
 
-function offerCard(o) {
+function offerCard(o, showListed = false) {
   const statusCls = o.channel === 'deal' ? 's-deal' : `s-${o.status}`;
   const statusTxt = o.channel === 'deal' ? 'Bon plan signalé · stock non vérifié' : STATUS[o.status];
   const shop = o.merchant ? `${esc(o.merchant)} <span class="muted">(via Dealabs)</span>` : esc(o.sourceName);
@@ -137,6 +194,8 @@ function offerCard(o) {
         <span>${esc(TYPES[o.type] ?? o.type)}</span>
         <span>${o.lang ? esc(LANGS[o.lang]) + (o.langGuessed ? ' (déduit)' : '') : 'Langue non précisée'}</span>
         ${o.setCode ? `<span>${esc(o.setCode)}</span>` : ''}
+        ${o.releaseHint ? `<span><b>Sortie : ${esc(day(o.releaseHint))}</b></span>` : ''}
+        ${showListed && o.listedAt ? `<span>Référencé ${ago(o.listedAt)}</span>` : ''}
         <span title="${esc(when(o.checkedAt))}">${o.channel === 'deal' ? `Posté ${ago(o.postedAt)}` : `Vérifié ${ago(o.checkedAt)}`}</span>
       </div>
       ${notes.length ? `<div class="meta">${notes.join(' ')}</div>` : ''}
@@ -152,15 +211,17 @@ function renderOffers() {
   const rank = { disponible: 0, precommande: 1, inconnu: 2, rupture: 3 };
   list.sort((a, b) => (rank[a.status] - rank[b.status]) || ((a.price ?? 1e9) - (b.price ?? 1e9)));
   const count = st => list.filter(o => o.status === st && o.channel !== 'deal').length;
+  const hiddenOut = onlyAvail ? S.offers.filter(o => matchOffer(o, f) && o.channel !== 'deal' && (o.status === 'rupture' || o.stale)).length : 0;
   $('#offers-summary').innerHTML = [
     `<span class="chip">${list.length} résultat(s)</span>`,
     `<span class="chip s-disponible">${count('disponible')} disponible(s)</span>`,
     `<span class="chip s-precommande">${count('precommande')} précommande(s)</span>`,
-    onlyAvail ? '' : `<span class="chip s-rupture">${count('rupture')} en rupture</span>`,
+    onlyAvail ? (hiddenOut ? `<a href="#" class="chip s-rupture" id="show-out">${hiddenOut} en rupture masqué(s) — afficher</a>` : '') : `<span class="chip s-rupture">${count('rupture')} en rupture</span>`,
     `<span class="chip s-deal">${list.filter(o => o.channel === 'deal').length} bon(s) plan(s)</span>`,
   ].join('');
   $('#offers').innerHTML = list.length ? list.slice(0, S.shown).map(offerCard).join('') : `<div class="panel muted">${S.offers.length ? 'Aucune offre ne correspond à ces filtres pour le moment.' : 'Aucune donnée pour l’instant : la première vérification automatique n’a pas encore publié de résultats.'}</div>`;
   $('#more').classList.toggle('hidden', list.length <= S.shown);
+  $('#show-out')?.addEventListener('click', e => { e.preventDefault(); $('#f-onlyavail').checked = false; renderOffers(); });
 }
 
 // ---------- stores ----------
@@ -232,7 +293,7 @@ function initStores() {
 }
 
 // ---------- searches editor ----------
-const NEW_SEARCH = () => ({ id: '', name: 'Nouvelle recherche', enabled: true, notify: true, keywords: [], excludeKeywords: [], types: [...DEFAULT_TYPES], languages: ['fr'], allowUnknownLanguage: true, maxPrice: null, retailers: [], channels: ['online', 'deal'], includePreorder: true, includeDeals: true, promoOnly: false });
+const NEW_SEARCH = () => ({ id: '', name: 'Nouvelle recherche', enabled: true, notify: true, keywords: [], excludeKeywords: [], types: [...DEFAULT_TYPES], languages: ['fr'], allowUnknownLanguage: true, maxPrice: null, retailers: [], channels: ['online', 'deal'], includePreorder: true, includeDeals: true, notifyListed: true, promoOnly: false });
 const slug = s => norm(s).replace(/\s+/g, '-').slice(0, 30) || 'recherche';
 const isDirty = () => JSON.stringify(S.searches) !== JSON.stringify(S.configSearches);
 
@@ -283,6 +344,7 @@ function openEditor(index) {
   form.includePreorder.checked = s.includePreorder !== false;
   form.promoOnly.checked = !!s.promoOnly;
   form.notify.checked = s.notify !== false;
+  form.notifyListed.checked = s.notifyListed !== false;
   form.enabled.checked = s.enabled !== false;
   const dlg = $('#edit-dlg');
   dlg.onclose = () => {
@@ -308,6 +370,7 @@ function openEditor(index) {
       includeDeals: form.deal.checked,
       promoOnly: form.promoOnly.checked,
       notify: form.notify.checked,
+      notifyListed: form.notifyListed.checked,
       enabled: form.enabled.checked,
     };
     if (!out.id) {
@@ -367,10 +430,13 @@ function renderStatus() {
 
 // ---------- boot ----------
 (async () => {
-  const [offers, status, alerts, sources, searches, stores] = await Promise.all([
+  const [offers, status, alerts, sources, searches, stores, releases] = await Promise.all([
     getJson(URLS.data + 'offers.json', null), getJson(URLS.data + 'status.json', null), getJson(URLS.data + 'alerts.json', { alerts: [] }),
     getJson(URLS.config + 'sources.json', []), getJson(URLS.config + 'searches.json', { searches: [] }), getJson('data/stores.json', null),
+    getJson(URLS.config + 'releases.json', null),
   ]);
+  S.releases = releases;
+  ['#u-fr', '#u-sealed'].forEach(id => $(id).addEventListener('change', renderUpcoming));
   if (!offers) {
     const n = $('#load-error');
     n.innerHTML = 'Pas encore de données de vérification publiées. Si vous venez d’installer l’application, attendez le premier passage automatique (≈ 15 min) ou lancez-le depuis l’onglet « État ».';

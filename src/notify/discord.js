@@ -3,8 +3,8 @@ import { STATUS, CHANNELS } from '../../docs/shared/match.js';
 import { TYPES, LANGS } from '../../docs/shared/classify.js';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const COLORS = { restock: 0x2ecc71, new: 0x3498db, deal: 0x9b59b6, digest: 0x95a5a6 };
-const HEADLINES = { restock: '🟢 Retour en stock', new: '🆕 Nouvelle offre disponible', deal: '💡 Bon plan signalé' };
+const COLORS = { restock: 0x2ecc71, new: 0x3498db, deal: 0x9b59b6, listed: 0xe67e22, digest: 0x95a5a6 };
+const HEADLINES = { restock: '🟢 Retour en stock', new: '🆕 Nouvelle offre disponible', deal: '💡 Bon plan signalé', listed: '📣 À venir : produit référencé, pas encore en vente' };
 
 const euro = v => (v == null ? 'prix non affiché' : `${v.toFixed(2).replace('.', ',')} €`);
 const paris = iso => new Date(iso).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'short', timeStyle: 'short' });
@@ -15,7 +15,8 @@ export function alertEmbed(alert, searchesById) {
   const lines = [
     `**Prix :** ${euro(o.price)}${o.compareAtPrice ? ` ~~${euro(o.compareAtPrice)}~~ (promo)` : ''}`,
     `**Boutique :** ${o.merchant ? `${o.merchant} (via ${o.sourceName})` : o.sourceName} — ${CHANNELS[o.channel]}${o.channel === 'online' ? ', livraison en France' : ''}`,
-    `**Disponibilité :** ${STATUS[o.status]}${o.channel === 'deal' ? ' (vérifiez sur le site du marchand)' : ''}`,
+    `**Disponibilité :** ${STATUS[o.status]}${o.channel === 'deal' ? ' (vérifiez sur le site du marchand)' : ''}${alert.kind === 'listed' ? ' — vous serez prévenu dès qu’il sera commandable' : ''}`,
+    ...(o.releaseHint ? [`**Sortie indiquée :** ${o.releaseHint.split('-').reverse().join('/')}`] : []),
     `**Produit :** ${TYPES[o.type] ?? o.type}${o.lang ? ` · ${LANGS[o.lang]}` : ' · langue non précisée'}${o.setCode ? ` · ${o.setCode}` : ''}`,
     `**Recherche :** ${alert.searchIds.map(id => searchesById[id]?.name ?? id).join(', ')}`,
     `**Vérifié le :** ${paris(o.checkedAt)}`,
