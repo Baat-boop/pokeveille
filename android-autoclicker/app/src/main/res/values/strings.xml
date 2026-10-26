@@ -12,7 +12,8 @@
     <string name="service_app_info">Ouvrir les infos de l\'appli</string>
 
     <string name="power_title">2. Puissance</string>
-    <string name="power_value">%1$d clics par seconde (un clic toutes les %2$d ms)</string>
+    <string name="power_value">%1$d clics par seconde (un clic toutes les %2$s ms)</string>
+    <string name="power_help">Au-delà de 60 à 120 clics/s (la fréquence de l\'écran), beaucoup de jeux ne comptent plus chaque clic : faites un essai pour trouver la vitesse utile.</string>
 
     <string name="mode_title">3. Mode de mise en marche</string>
     <string name="mode_toggle">1 appui = marche, 1 appui = arrêt</string>

@@ -47,6 +47,8 @@ public class ClickService extends AccessibilityService
     private static final int COLOR_SMALL = 0xFF424242;
     /** Laisse le temps à la cible de devenir « traversable » avant le premier clic. */
     private static final long FIRST_CLICK_DELAY_MS = 60;
+    private static final int MAX_TAPS_PER_GESTURE = 20;
+    private static final double BATCH_SPAN_MS = 50;
 
     private static ClickService instance;
 
@@ -67,19 +69,37 @@ public class ClickService extends AccessibilityService
     private boolean clicking;
     private float clickX;
     private float clickY;
-    private long nextClickAt;
+    /** Heure (uptimeMillis) du prochain envoi, en double pour ne pas dériver à 300 ou 500 clics/s. */
+    private double nextBatchAt;
 
+    /** Change à chaque démarrage : les fins de gestes d'une session précédente sont ignorées. */
+    private int session;
+
+    /**
+     * Chaque geste envoyé à Android regroupe les clics des ~50 prochaines ms (jusqu'à 20) :
+     * un envoi par clic ne suit pas au-delà de ~50 clics/s, et des paquets courts gardent
+     * l'arrêt immédiat. Le paquet suivant part quand le précédent est fini : un nouveau
+     * geste annulerait le dernier clic encore en cours.
+     */
     private final Runnable clickLoop = new Runnable() {
         @Override
         public void run() {
             if (!clicking) return;
-            long interval = 1000L / Prefs.cps(prefs);
-            tap(clickX, clickY, Math.max(1, Math.min(10, interval / 2)));
-            long now = SystemClock.uptimeMillis();
-            nextClickAt = Math.max(nextClickAt + interval, now);
-            handler.postAtTime(this, nextClickAt);
+            int cps = Prefs.cps(prefs);
+            double interval = 1000.0 / cps;
+            int maxTaps = Math.min(MAX_TAPS_PER_GESTURE, GestureDescription.getMaxStrokeCount());
+            int taps = Math.max(1, Math.min(maxTaps, (int) (BATCH_SPAN_MS / interval)));
+            long duration = Math.max(1, Math.min(10, (long) (interval / 2)));
+            nextBatchAt += taps * interval;
+            if (!tapBurst(clickX, clickY, taps, interval, duration, session)) scheduleNextBatch();
         }
     };
+
+    private void scheduleNextBatch() {
+        if (!clicking) return;
+        nextBatchAt = Math.max(nextBatchAt, SystemClock.uptimeMillis());
+        handler.postAtTime(clickLoop, (long) Math.ceil(nextBatchAt));
+    }
 
     private final BroadcastReceiver screenOff = new BroadcastReceiver() {
         @Override
@@ -225,9 +245,10 @@ public class ClickService extends AccessibilityService
         clickX = loc[0] + target.getWidth() / 2f;
         clickY = loc[1] + target.getHeight() / 2f;
         clicking = true;
+        session++;
         setTargetTouchable(false); // sinon les clics tomberaient sur la cible elle-même
-        nextClickAt = SystemClock.uptimeMillis() + FIRST_CLICK_DELAY_MS;
-        handler.postAtTime(clickLoop, nextClickAt);
+        nextBatchAt = SystemClock.uptimeMillis() + FIRST_CLICK_DELAY_MS;
+        handler.postAtTime(clickLoop, (long) nextBatchAt);
         refreshPanel();
     }
 
@@ -239,13 +260,30 @@ public class ClickService extends AccessibilityService
         refreshPanel();
     }
 
-    private void tap(float x, float y, long durationMs) {
+    /**
+     * Envoie `count` clics au même point, un toutes les `intervalMs`, en un seul geste,
+     * puis enchaîne le paquet suivant quand il est fini (ou interrompu par un vrai toucher).
+     * @return false si Android a refusé le geste.
+     */
+    private boolean tapBurst(float x, float y, int count, double intervalMs, long durationMs, int forSession) {
         Path path = new Path();
         path.moveTo(x, y);
-        GestureDescription gesture = new GestureDescription.Builder()
-                .addStroke(new GestureDescription.StrokeDescription(path, 0, durationMs))
-                .build();
-        dispatchGesture(gesture, null, null);
+        GestureDescription.Builder gesture = new GestureDescription.Builder();
+        for (int i = 0; i < count; i++) {
+            long start = Math.round(i * intervalMs);
+            gesture.addStroke(new GestureDescription.StrokeDescription(path, start, durationMs));
+        }
+        return dispatchGesture(gesture.build(), new GestureResultCallback() {
+            @Override
+            public void onCompleted(GestureDescription g) {
+                if (forSession == session) scheduleNextBatch();
+            }
+
+            @Override
+            public void onCancelled(GestureDescription g) {
+                if (forSession == session) scheduleNextBatch();
+            }
+        }, handler);
     }
 
     // --- Panneau flottant -------------------------------------------------------------------

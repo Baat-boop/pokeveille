@@ -2,7 +2,8 @@
 
 Petite application Android (sans pub, sans Internet, sans root) qui clique à votre place à l'endroit d'une cible.
 
-- **Puissance réglable** : de 1 à 50 clics par seconde (curseur dans l'appli, ou − / + sur le panneau flottant, même pendant que ça clique).
+- **Puissance réglable** : de 1 à 500 clics par seconde (curseur dans l'appli, ou − / + sur le panneau flottant, même pendant que ça clique).
+  Au-delà de 60 à 120 clics/s (fréquence de l'écran), beaucoup de jeux ne comptent plus chaque clic : faites un essai.
 - **Bouton flottant** simple : ▶ démarre, ■ arrête.
 - **Deux modes de mise en marche** :
   - *1 appui = marche, 1 appui = arrêt* : bouton flottant **ou** touche de volume ;

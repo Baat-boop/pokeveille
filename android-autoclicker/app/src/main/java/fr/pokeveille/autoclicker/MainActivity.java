@@ -18,6 +18,8 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.Locale;
+
 public class MainActivity extends Activity {
     private SharedPreferences prefs;
     private TextView serviceStatus;
@@ -43,11 +45,11 @@ public class MainActivity extends Activity {
 
         powerValue = findViewById(R.id.power_value);
         powerSeek = findViewById(R.id.power_seek);
-        powerSeek.setMax(Prefs.MAX_CPS - Prefs.MIN_CPS);
+        powerSeek.setMax(Prefs.CPS_STEPS.length - 1);
         powerSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (fromUser) setCps(Prefs.MIN_CPS + progress);
+                if (fromUser) setCps(Prefs.CPS_STEPS[progress]);
             }
 
             @Override
@@ -56,8 +58,8 @@ public class MainActivity extends Activity {
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {}
         });
-        findViewById(R.id.power_minus).setOnClickListener(v -> setCps(Prefs.cps(prefs) - 1));
-        findViewById(R.id.power_plus).setOnClickListener(v -> setCps(Prefs.cps(prefs) + 1));
+        findViewById(R.id.power_minus).setOnClickListener(v -> setCps(Prefs.stepDown(Prefs.cps(prefs))));
+        findViewById(R.id.power_plus).setOnClickListener(v -> setCps(Prefs.stepUp(Prefs.cps(prefs))));
 
         RadioGroup modeGroup = findViewById(R.id.mode_group);
         modeGroup.check(Prefs.mode(prefs) == Prefs.MODE_HOLD ? R.id.mode_hold : R.id.mode_toggle);
@@ -145,8 +147,9 @@ public class MainActivity extends Activity {
         ((TextView) findViewById(R.id.error_text)).setText(error);
 
         int cps = Prefs.cps(prefs);
-        powerValue.setText(getString(R.string.power_value, cps, 1000 / cps));
-        powerSeek.setProgress(cps - Prefs.MIN_CPS);
+        String every = String.format(Locale.FRANCE, cps > 100 ? "%.1f" : "%.0f", 1000.0 / cps);
+        powerValue.setText(getString(R.string.power_value, cps, every));
+        powerSeek.setProgress(Prefs.stepIndex(cps));
 
         boolean hold = Prefs.mode(prefs) == Prefs.MODE_HOLD;
         findViewById(R.id.mode_hold_help).setVisibility(hold ? View.VISIBLE : View.GONE);

@@ -131,6 +131,10 @@
                 android:textSize="20sp" />
         </LinearLayout>
 
+        <TextView
+            style="@style/Hint"
+            android:text="@string/power_help" />
+
         <!-- 3. Mode -->
         <TextView
             style="@style/SectionTitle"
