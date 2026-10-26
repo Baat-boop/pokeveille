@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textColor="#FFFFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <!-- 1. Autorisation -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/service_title" />
+
+        <TextView
+            android:id="@+id/service_status"
+            style="@style/Body" />
+
+        <Button
+            android:id="@+id/service_open"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/service_open" />
+
+        <TextView
+            android:id="@+id/service_restricted_help"
+            style="@style/Hint"
+            android:text="@string/service_restricted_help" />
+
+        <Button
+            android:id="@+id/service_app_info"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/service_app_info" />
+
+        <!-- 2. Puissance -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/power_title" />
+
+        <TextView
+            android:id="@+id/power_value"
+            style="@style/Body" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/power_minus"
+                android:layout_width="56dp"
+                android:layout_height="wrap_content"
+                android:text="−"
+                android:textSize="20sp" />
+
+            <SeekBar
+                android:id="@+id/power_seek"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+
+            <Button
+                android:id="@+id/power_plus"
+                android:layout_width="56dp"
+                android:layout_height="wrap_content"
+                android:text="+"
+                android:textSize="20sp" />
+        </LinearLayout>
+
+        <!-- 3. Mode -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/mode_title" />
+
+        <RadioGroup
+            android:id="@+id/mode_group"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <RadioButton
+                android:id="@+id/mode_toggle"
+                style="@style/Choice"
+                android:text="@string/mode_toggle" />
+
+            <RadioButton
+                android:id="@+id/mode_hold"
+                style="@style/Choice"
+                android:text="@string/mode_hold" />
+        </RadioGroup>
+
+        <TextView
+            android:id="@+id/mode_hold_help"
+            style="@style/Hint"
+            android:text="@string/mode_hold_help" />
+
+        <!-- 4. Touche physique -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/key_title" />
+
+        <RadioGroup
+            android:id="@+id/key_group"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <RadioButton
+                android:id="@+id/key_vol_down"
+                style="@style/Choice"
+                android:text="@string/key_vol_down" />
+
+            <RadioButton
+                android:id="@+id/key_vol_up"
+                style="@style/Choice"
+                android:text="@string/key_vol_up" />
+
+            <RadioButton
+                android:id="@+id/key_none"
+                style="@style/Choice"
+                android:text="@string/key_none" />
+        </RadioGroup>
+
+        <TextView
+            style="@style/Hint"
+            android:text="@string/key_help" />
+
+        <Button
+            android:id="@+id/overlay_toggle"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginTop="24dp"
+            android:backgroundTint="#FF2E7D32"
+            android:textColor="#FFFFFFFF"
+            android:textSize="18sp" />
+
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/howto_title" />
+
+        <TextView
+            style="@style/Body"
+            android:lineSpacingMultiplier="1.2"
+            android:text="@string/howto" />
+    </LinearLayout>
+</ScrollView>

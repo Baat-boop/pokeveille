@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Auto-clicker</string>
+    <string name="a11y_description">Permet à Auto-clicker de toucher l\'écran à votre place, à l\'endroit de la cible, quand vous l\'allumez avec le bouton flottant ou une touche de volume. L\'application ne lit pas le contenu de l\'écran.</string>
+
+    <string name="service_title">1. Autorisation</string>
+    <string name="service_on">✅ Service activé</string>
+    <string name="service_off">❌ Service désactivé : Android exige l\'accessibilité pour qu\'une application puisse toucher l\'écran.</string>
+    <string name="service_open">Activer dans Accessibilité</string>
+    <string name="service_restricted_help">Si l\'interrupteur est grisé (« paramètre restreint ») : ouvrez les infos de l\'appli, menu ⋮ en haut à droite → « Autoriser les paramètres restreints », puis réessayez.</string>
+    <string name="service_app_info">Ouvrir les infos de l\'appli</string>
+
+    <string name="power_title">2. Puissance</string>
+    <string name="power_value">%1$d clics par seconde (un clic toutes les %2$d ms)</string>
+
+    <string name="mode_title">3. Mode de mise en marche</string>
+    <string name="mode_toggle">1 appui = marche, 1 appui = arrêt</string>
+    <string name="mode_hold">Clique tant que le bouton est maintenu</string>
+    <string name="mode_hold_help">En mode maintien, le bouton à maintenir est la touche de volume choisie ci-dessous : Android annule le doigt posé sur l\'écran à chaque clic automatique, un bouton à l\'écran ne peut donc pas être maintenu.</string>
+
+    <string name="key_title">4. Touche physique</string>
+    <string name="key_vol_down">Volume −</string>
+    <string name="key_vol_up">Volume +</string>
+    <string name="key_none">Aucune (bouton à l\'écran seulement)</string>
+    <string name="key_help">Tant que le bouton flottant est affiché, cette touche commande l\'auto-clicker au lieu du volume.</string>
+
+    <string name="overlay_show">Afficher le bouton flottant</string>
+    <string name="overlay_hide">Masquer le bouton flottant</string>
+
+    <string name="howto_title">Utilisation</string>
+    <string name="howto">• Placez la cible 🎯 (glissez-la) sur l\'endroit à cliquer.\n• Le panneau flottant se déplace en glissant le gros bouton.\n• ▶ démarre, ■ arrête. − / + changent la puissance à la volée.\n• ✕ ferme le panneau.\n• Les clics s\'arrêtent aussi quand l\'écran s\'éteint.</string>
+
+    <string name="toast_hold">Maintenez la touche %1$s pour cliquer</string>
+    <string name="toast_need_service">Activez d\'abord le service d\'accessibilité</string>
+</resources>

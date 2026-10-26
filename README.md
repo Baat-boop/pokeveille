@@ -69,3 +69,7 @@ npm test                      # tests (filtres, retours en stock, anti-doublons�
 node src/check.js --data .data-local   # un passage en local (sans webhook : aucune alerte envoyée)
 node tools/serve.mjs          # aperçu sur http://localhost:8080/docs/?local
 ```
+
+## Bonus : auto-clicker Android
+
+Une petite appli Android d’auto-clic (puissance réglable, bouton flottant, mode « 1 appui » ou « maintien ») vit dans [`android-autoclicker/`](android-autoclicker/README.md). APK : https://github.com/baat-boop/pokeveille/releases/download/autoclicker-latest/AutoClicker.apk

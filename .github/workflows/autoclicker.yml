@@ -1,0 +1,52 @@
+name: Auto-clicker Android (APK)
+
+on:
+  push:
+    paths: ['android-autoclicker/**', '.github/workflows/autoclicker.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autoclicker-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Compiler l'APK
+        working-directory: android-autoclicker
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - run: cp android-autoclicker/app/build/outputs/apk/release/app-release.apk AutoClicker.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutoClicker
+          path: AutoClicker.apk
+
+      # Lien de téléchargement fixe, ouvrable directement depuis le téléphone :
+      # https://github.com/<dépôt>/releases/download/autoclicker-latest/AutoClicker.apk
+      - name: Publier la dernière version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete autoclicker-latest --yes --cleanup-tag || true
+          gh release create autoclicker-latest AutoClicker.apk \
+            --target "$GITHUB_SHA" \
+            --title "Auto-clicker Android" \
+            --notes "Dernière version compilée depuis ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). Voir android-autoclicker/README.md pour l'installation."

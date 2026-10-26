@@ -1,0 +1,42 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'fr.pokeveille.autoclicker'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'fr.pokeveille.autoclicker'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+
+    // Clé de signature fixe (application personnelle, installée hors Play Store) :
+    // permet d'installer une nouvelle version par-dessus l'ancienne sans désinstaller.
+    signingConfigs {
+        shared {
+            storeFile file('autoclicker.keystore')
+            storePassword 'autoclicker'
+            keyAlias 'autoclicker'
+            keyPassword 'autoclicker'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.shared
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.shared
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
