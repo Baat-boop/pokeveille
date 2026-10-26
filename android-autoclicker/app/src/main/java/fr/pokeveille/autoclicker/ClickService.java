@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.res.Configuration;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
@@ -61,6 +62,8 @@ public class ClickService extends AccessibilityService
     private WindowManager.LayoutParams targetParams;
 
     private boolean screenOffRegistered;
+    /** Taille d'écran pour laquelle la cible et le panneau sont placés. */
+    private Point placedFor;
     private boolean clicking;
     private float clickX;
     private float clickY;
@@ -128,6 +131,13 @@ public class ClickService extends AccessibilityService
     }
 
     @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // Laisse au système le temps d'appliquer la nouvelle orientation avant de mesurer.
+        handler.postDelayed(this::fitToScreen, 150);
+    }
+
+    @Override
     public void onInterrupt() {
         stopClicking();
     }
@@ -170,6 +180,7 @@ public class ClickService extends AccessibilityService
 
     private void addOverlay() {
         Point screen = screenSize();
+        placedFor = screen;
 
         target = new TargetView(this);
         int targetSize = dp(56);
@@ -327,7 +338,7 @@ public class ClickService extends AccessibilityService
         if (target == null || !target.isAttachedToWindow()) return;
         if (touchable) targetParams.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
         else targetParams.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-        target.setAlpha(touchable ? 1f : 0.45f);
+        target.setAlpha(touchable ? 1f : 0.7f);
         wm.updateViewLayout(target, targetParams);
     }
 
@@ -368,6 +379,35 @@ public class ClickService extends AccessibilityService
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
         return lp;
+    }
+
+    /**
+     * Après une rotation (jeu en paysage…), garde la cible et le panneau au même endroit
+     * relatif : sinon la cible placée au milieu de l'écran en portrait sort de l'écran.
+     */
+    private void fitToScreen() {
+        if (panel == null) return;
+        Point screen = screenSize();
+        if (screen.equals(placedFor)) return;
+        stopClicking(); // le point visé ne correspond plus à rien
+        moveProportionally(target, targetParams, placedFor, screen);
+        moveProportionally(panel, panelParams, placedFor, screen);
+        placedFor = screen;
+    }
+
+    private void moveProportionally(View view, WindowManager.LayoutParams lp, Point from, Point to) {
+        int w = view.getWidth();
+        int h = view.getHeight();
+        float cx = (lp.x + w / 2f) / from.x;
+        float cy = (lp.y + h / 2f) / from.y;
+        lp.x = Math.round(cx * to.x - w / 2f);
+        lp.y = Math.round(cy * to.y - h / 2f);
+        clamp(lp, w, h);
+        try {
+            wm.updateViewLayout(view, lp);
+        } catch (RuntimeException ignored) {
+            // Fenêtre retirée entre-temps.
+        }
     }
 
     private Point screenSize() {
