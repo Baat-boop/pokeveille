@@ -6,6 +6,7 @@
     <string name="service_title">1. Autorisation</string>
     <string name="service_on">✅ Service activé</string>
     <string name="service_off">❌ Service désactivé : Android exige l\'accessibilité pour qu\'une application puisse toucher l\'écran.</string>
+    <string name="service_not_running">⚠️ Activé dans Accessibilité, mais Android a arrêté le service. Désactivez puis réactivez « Auto-clicker » dans Accessibilité.\n\nSur Xiaomi / Redmi / POCO, dans les infos de l\'appli : activez « Démarrage automatique » et mettez l\'économiseur de batterie sur « Pas de restrictions ».</string>
     <string name="service_open">Activer dans Accessibilité</string>
     <string name="service_restricted_help">Si l\'interrupteur est grisé (« paramètre restreint ») : ouvrez les infos de l\'appli, menu ⋮ en haut à droite → « Autoriser les paramètres restreints », puis réessayez.</string>
     <string name="service_app_info">Ouvrir les infos de l\'appli</string>
@@ -31,5 +32,11 @@
     <string name="howto">• Placez la cible 🎯 (glissez-la) sur l\'endroit à cliquer.\n• Le panneau flottant se déplace en glissant le gros bouton.\n• ▶ démarre, ■ arrête. − / + changent la puissance à la volée.\n• ✕ ferme le panneau.\n• Les clics s\'arrêtent aussi quand l\'écran s\'éteint.</string>
 
     <string name="toast_hold">Maintenez la touche %1$s pour cliquer</string>
+    <string name="error_title">⚠️ Dernière erreur</string>
+    <string name="error_help">Copiez ce texte et envoyez-le pour que le problème soit corrigé.</string>
+    <string name="error_copy">Copier l\'erreur</string>
+    <string name="error_clear">Effacer</string>
+    <string name="error_copied">Erreur copiée</string>
+    <string name="toast_overlay_failed">Android a refusé d\'afficher le bouton flottant (voir l\'erreur dans l\'appli)</string>
     <string name="toast_need_service">Activez d\'abord le service d\'accessibilité</string>
 </resources>

@@ -10,14 +10,15 @@ import android.content.SharedPreferences;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
-import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
+import android.view.Display;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -59,6 +60,7 @@ public class ClickService extends AccessibilityService
     private TargetView target;
     private WindowManager.LayoutParams targetParams;
 
+    private boolean screenOffRegistered;
     private boolean clicking;
     private float clickX;
     private float clickY;
@@ -94,7 +96,19 @@ public class ClickService extends AccessibilityService
         prefs = Prefs.get(this);
         prefs.registerOnSharedPreferenceChangeListener(this);
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        registerReceiver(screenOff, new IntentFilter(Intent.ACTION_SCREEN_OFF));
+        IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_OFF);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                // Diffusion protégée : seul le système peut l'envoyer.
+                registerReceiver(screenOff, filter, Context.RECEIVER_EXPORTED);
+            } else {
+                registerReceiver(screenOff, filter);
+            }
+            screenOffRegistered = true;
+        } catch (RuntimeException e) {
+            // Simple sécurité en plus : le service doit démarrer même sans elle.
+            App.logError(this, "Écran éteint", e);
+        }
     }
 
     @Override
@@ -102,7 +116,7 @@ public class ClickService extends AccessibilityService
         if (instance == this) {
             hideOverlay();
             prefs.unregisterOnSharedPreferenceChangeListener(this);
-            unregisterReceiver(screenOff);
+            if (screenOffRegistered) unregisterReceiver(screenOff);
             instance = null;
         }
         super.onDestroy();
@@ -141,8 +155,20 @@ public class ClickService extends AccessibilityService
         return panel != null;
     }
 
-    void showOverlay() {
-        if (panel != null) return;
+    /** @return false si Android a refusé d'afficher le panneau (erreur enregistrée). */
+    boolean showOverlay() {
+        if (panel != null) return true;
+        try {
+            addOverlay();
+            return true;
+        } catch (RuntimeException e) {
+            App.logError(this, "Affichage du bouton flottant", e);
+            hideOverlay();
+            return false;
+        }
+    }
+
+    private void addOverlay() {
         Point screen = screenSize();
 
         target = new TargetView(this);
@@ -166,10 +192,19 @@ public class ClickService extends AccessibilityService
 
     void hideOverlay() {
         stopClicking();
-        if (panel != null) wm.removeView(panel);
-        if (target != null) wm.removeView(target);
+        removeQuietly(panel);
+        removeQuietly(target);
         panel = null;
         target = null;
+    }
+
+    private void removeQuietly(View view) {
+        if (view == null) return;
+        try {
+            wm.removeView(view);
+        } catch (RuntimeException ignored) {
+            // Fenêtre jamais ajoutée (échec de l'affichage) ou déjà retirée par le système.
+        }
     }
 
     private void startClicking() {
@@ -289,7 +324,7 @@ public class ClickService extends AccessibilityService
     }
 
     private void setTargetTouchable(boolean touchable) {
-        if (target == null) return;
+        if (target == null || !target.isAttachedToWindow()) return;
         if (touchable) targetParams.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
         else targetParams.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
         target.setAlpha(touchable ? 1f : 0.45f);
@@ -336,12 +371,10 @@ public class ClickService extends AccessibilityService
     }
 
     private Point screenSize() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Rect b = wm.getCurrentWindowMetrics().getBounds();
-            return new Point(b.width(), b.height());
-        }
         DisplayMetrics m = new DisplayMetrics();
-        wm.getDefaultDisplay().getRealMetrics(m);
+        Display display = getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
+        if (display != null) display.getRealMetrics(m);
+        else m = getResources().getDisplayMetrics();
         return new Point(m.widthPixels, m.heightPixels);
     }
 

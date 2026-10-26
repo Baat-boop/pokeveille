@@ -1,6 +1,9 @@
 package fr.pokeveille.autoclicker;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
@@ -80,6 +83,18 @@ public class MainActivity extends Activity {
             prefs.edit().putInt(Prefs.KEY_HW, key).apply();
         });
 
+        findViewById(R.id.error_copy).setOnClickListener(v -> {
+            String error = App.lastError(this);
+            if (error == null) return;
+            getSystemService(ClipboardManager.class)
+                    .setPrimaryClip(ClipData.newPlainText("Erreur Auto-clicker", error));
+            Toast.makeText(this, R.string.error_copied, Toast.LENGTH_SHORT).show();
+        });
+        findViewById(R.id.error_clear).setOnClickListener(v -> {
+            App.clearError(this);
+            refresh();
+        });
+
         overlayToggle = findViewById(R.id.overlay_toggle);
         overlayToggle.setOnClickListener(v -> toggleOverlay());
     }
@@ -105,20 +120,29 @@ public class MainActivity extends Activity {
         if (service.isOverlayShown()) {
             service.hideOverlay();
             refresh();
-        } else {
-            service.showOverlay();
+        } else if (service.showOverlay()) {
             moveTaskToBack(true); // retour à l'appli à cliquer
+        } else {
+            Toast.makeText(this, R.string.toast_overlay_failed, Toast.LENGTH_LONG).show();
+            refresh();
         }
     }
 
     private void refresh() {
         ClickService service = ClickService.get();
         boolean enabled = service != null;
-        serviceStatus.setText(enabled ? R.string.service_on : R.string.service_off);
+        boolean stalled = !enabled && isEnabledInSettings();
+        serviceStatus.setText(enabled ? R.string.service_on
+                : stalled ? R.string.service_not_running : R.string.service_off);
         serviceOpen.setVisibility(enabled ? View.GONE : View.VISIBLE);
-        boolean restrictedPossible = !enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU;
+        boolean restrictedPossible = !enabled && !stalled
+                && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU;
         findViewById(R.id.service_restricted_help).setVisibility(restrictedPossible ? View.VISIBLE : View.GONE);
-        findViewById(R.id.service_app_info).setVisibility(restrictedPossible ? View.VISIBLE : View.GONE);
+        findViewById(R.id.service_app_info).setVisibility(enabled ? View.GONE : View.VISIBLE);
+
+        String error = App.lastError(this);
+        findViewById(R.id.error_box).setVisibility(error != null ? View.VISIBLE : View.GONE);
+        ((TextView) findViewById(R.id.error_text)).setText(error);
 
         int cps = Prefs.cps(prefs);
         powerValue.setText(getString(R.string.power_value, cps, 1000 / cps));
@@ -131,5 +155,17 @@ public class MainActivity extends Activity {
 
         overlayToggle.setText(enabled && service.isOverlayShown()
                 ? R.string.overlay_hide : R.string.overlay_show);
+    }
+
+    /** Coché dans Accessibilité, qu'Android ait réussi à démarrer le service ou non. */
+    private boolean isEnabledInSettings() {
+        String list = Settings.Secure.getString(getContentResolver(),
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        if (list == null) return false;
+        ComponentName self = new ComponentName(this, ClickService.class);
+        for (String entry : list.split(":")) {
+            if (self.equals(ComponentName.unflattenFromString(entry))) return true;
+        }
+        return false;
     }
 }
