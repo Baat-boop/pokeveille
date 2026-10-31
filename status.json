@@ -1,0 +1,53 @@
+{
+ "lastRunAt": "2026-10-31T20:36:49.354Z",
+ "webhookConfigured": true,
+ "alertsThisRun": 22,
+ "alertsSent": 0,
+ "sources": [
+  {
+   "id": "pokemanias",
+   "name": "Pokémania",
+   "type": "shopify",
+   "ok": true,
+   "count": 37,
+   "available": 24,
+   "ms": 2211
+  },
+  {
+   "id": "leshiny",
+   "name": "LeShiny (Hérault)",
+   "type": "shopify",
+   "ok": true,
+   "count": 114,
+   "available": 46,
+   "ms": 2229
+  },
+  {
+   "id": "sneyzen",
+   "name": "Sneyzen Corp (Paris)",
+   "type": "shopify",
+   "ok": true,
+   "count": 733,
+   "available": 171,
+   "ms": 6146
+  },
+  {
+   "id": "hikaru",
+   "name": "Hikaru Distribution (Paris)",
+   "type": "shopify",
+   "ok": true,
+   "count": 3494,
+   "available": 182,
+   "ms": 34658
+  },
+  {
+   "id": "dealabs",
+   "name": "Dealabs",
+   "type": "dealabs",
+   "ok": true,
+   "count": 3,
+   "available": 0,
+   "ms": 2510
+  }
+ ]
+}
