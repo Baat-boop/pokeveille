@@ -47,7 +47,7 @@ public class ClickService extends AccessibilityService
     private static final int COLOR_SMALL = 0xFF424242;
     /** Laisse le temps à la cible de devenir « traversable » avant le premier clic. */
     private static final long FIRST_CLICK_DELAY_MS = 60;
-    private static final int MAX_TAPS_PER_GESTURE = 20;
+    private static final int MAX_STROKES_PER_GESTURE = 20;
     private static final double BATCH_SPAN_MS = 50;
 
     private static ClickService instance;
@@ -87,11 +87,15 @@ public class ClickService extends AccessibilityService
             if (!clicking) return;
             int cps = Prefs.cps(prefs);
             double interval = 1000.0 / cps;
-            int maxTaps = Math.min(MAX_TAPS_PER_GESTURE, GestureDescription.getMaxStrokeCount());
+            int fingers = Prefs.fingers(prefs);
+            int maxStrokes = Math.min(MAX_STROKES_PER_GESTURE, GestureDescription.getMaxStrokeCount());
+            int maxTaps = Math.max(1, maxStrokes / fingers);
             int taps = Math.max(1, Math.min(maxTaps, (int) (BATCH_SPAN_MS / interval)));
             long duration = Math.max(1, Math.min(10, (long) (interval / 2)));
             nextBatchAt += taps * interval;
-            if (!tapBurst(clickX, clickY, taps, interval, duration, session)) scheduleNextBatch();
+            if (!tapBurst(clickX, clickY, fingers, taps, interval, duration, session)) {
+                scheduleNextBatch();
+            }
         }
     };
 
@@ -178,6 +182,7 @@ public class ClickService extends AccessibilityService
     @Override
     public void onSharedPreferenceChanged(SharedPreferences p, String key) {
         if (Prefs.KEY_MODE.equals(key) || Prefs.KEY_HW.equals(key)) stopClicking();
+        // Le nombre de doigts et la vitesse sont relus à chaque paquet : pas besoin d'arrêter.
         refreshPanel();
     }
 
@@ -261,17 +266,28 @@ public class ClickService extends AccessibilityService
     }
 
     /**
-     * Envoie `count` clics au même point, un toutes les `intervalMs`, en un seul geste,
-     * puis enchaîne le paquet suivant quand il est fini (ou interrompu par un vrai toucher).
+     * Envoie `count` clics, un toutes les `intervalMs`, en un seul geste ; à chaque clic,
+     * `fingers` doigts tapent ensemble autour du point (les jeux qui lisent l'écran une fois
+     * par image comptent chaque doigt, au lieu de perdre les clics trop rapprochés).
+     * Le paquet suivant part quand celui-ci est fini (ou interrompu par un vrai toucher).
      * @return false si Android a refusé le geste.
      */
-    private boolean tapBurst(float x, float y, int count, double intervalMs, long durationMs, int forSession) {
-        Path path = new Path();
-        path.moveTo(x, y);
+    private boolean tapBurst(float x, float y, int fingers, int count, double intervalMs,
+            long durationMs, int forSession) {
+        Path[] paths = new Path[fingers];
+        float spread = dp(4); // reste dans le bouton visé
+        for (int f = 0; f < fingers; f++) {
+            double angle = f == 0 ? 0 : 2 * Math.PI * (f - 1) / (fingers - 1);
+            float r = f == 0 ? 0 : spread;
+            paths[f] = new Path();
+            paths[f].moveTo(x + r * (float) Math.cos(angle), y + r * (float) Math.sin(angle));
+        }
         GestureDescription.Builder gesture = new GestureDescription.Builder();
         for (int i = 0; i < count; i++) {
             long start = Math.round(i * intervalMs);
-            gesture.addStroke(new GestureDescription.StrokeDescription(path, start, durationMs));
+            for (Path path : paths) {
+                gesture.addStroke(new GestureDescription.StrokeDescription(path, start, durationMs));
+            }
         }
         return dispatchGesture(gesture.build(), new GestureResultCallback() {
             @Override
@@ -342,7 +358,8 @@ public class ClickService extends AccessibilityService
     private void refreshPanel() {
         if (panel == null) return;
         int cps = Prefs.cps(prefs);
-        speedLabel.setText(cps + "/s");
+        int fingers = Prefs.fingers(prefs);
+        speedLabel.setText(fingers > 1 ? cps + "/s\n×" + fingers : cps + "/s");
         GradientDrawable bg = (GradientDrawable) mainButton.getBackground();
         if (clicking) {
             mainButton.setText("■");

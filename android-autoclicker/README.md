@@ -4,6 +4,8 @@ Petite application Android (sans pub, sans Internet, sans root) qui clique à vo
 
 - **Puissance réglable** : de 1 à 500 clics par seconde (curseur dans l'appli, ou − / + sur le panneau flottant, même pendant que ça clique).
   Au-delà de 60 à 120 clics/s (fréquence de l'écran), beaucoup de jeux ne comptent plus chaque clic : faites un essai.
+- **Doigts en même temps** (1 à 10) : à chaque clic, plusieurs doigts tapent ensemble autour de la cible.
+  Contourne la limite de l'écran dans les jeux qui comptent chaque doigt (ex. 60 clics/s × 5 doigts = 300 clics/s).
 - **Bouton flottant** simple : ▶ démarre, ■ arrête.
 - **Deux modes de mise en marche** :
   - *1 appui = marche, 1 appui = arrêt* : bouton flottant **ou** touche de volume ;

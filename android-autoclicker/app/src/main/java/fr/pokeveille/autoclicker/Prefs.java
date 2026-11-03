@@ -9,6 +9,7 @@ final class Prefs {
     static final String KEY_CPS = "cps";
     static final String KEY_MODE = "mode";
     static final String KEY_HW = "hw_key";
+    static final String KEY_FINGERS = "fingers";
 
     static final int MODE_TOGGLE = 0;
     static final int MODE_HOLD = 1;
@@ -20,6 +21,8 @@ final class Prefs {
     static final int MIN_CPS = 1;
     static final int MAX_CPS = 500;
     static final int DEFAULT_CPS = 10;
+
+    static final int MAX_FINGERS = 10;
 
     /** Crans du curseur et des boutons − / + : fins en bas, larges en haut. */
     static final int[] CPS_STEPS = {
@@ -34,6 +37,15 @@ final class Prefs {
 
     static int cps(SharedPreferences p) {
         return clampCps(p.getInt(KEY_CPS, DEFAULT_CPS));
+    }
+
+    /** Nombre de doigts qui tapent en même temps à chaque clic. */
+    static int fingers(SharedPreferences p) {
+        return clampFingers(p.getInt(KEY_FINGERS, 1));
+    }
+
+    static int clampFingers(int fingers) {
+        return Math.max(1, Math.min(MAX_FINGERS, fingers));
     }
 
     static int mode(SharedPreferences p) {

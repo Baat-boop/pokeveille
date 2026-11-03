@@ -60,6 +60,8 @@ public class MainActivity extends Activity {
         });
         findViewById(R.id.power_minus).setOnClickListener(v -> setCps(Prefs.stepDown(Prefs.cps(prefs))));
         findViewById(R.id.power_plus).setOnClickListener(v -> setCps(Prefs.stepUp(Prefs.cps(prefs))));
+        findViewById(R.id.fingers_minus).setOnClickListener(v -> setFingers(Prefs.fingers(prefs) - 1));
+        findViewById(R.id.fingers_plus).setOnClickListener(v -> setFingers(Prefs.fingers(prefs) + 1));
 
         RadioGroup modeGroup = findViewById(R.id.mode_group);
         modeGroup.check(Prefs.mode(prefs) == Prefs.MODE_HOLD ? R.id.mode_hold : R.id.mode_toggle);
@@ -112,6 +114,11 @@ public class MainActivity extends Activity {
         refresh();
     }
 
+    private void setFingers(int fingers) {
+        prefs.edit().putInt(Prefs.KEY_FINGERS, Prefs.clampFingers(fingers)).apply();
+        refresh();
+    }
+
     private void toggleOverlay() {
         ClickService service = ClickService.get();
         if (service == null) {
@@ -150,6 +157,10 @@ public class MainActivity extends Activity {
         String every = String.format(Locale.FRANCE, cps > 100 ? "%.1f" : "%.0f", 1000.0 / cps);
         powerValue.setText(getString(R.string.power_value, cps, every));
         powerSeek.setProgress(Prefs.stepIndex(cps));
+        int fingers = Prefs.fingers(prefs);
+        ((TextView) findViewById(R.id.fingers_count)).setText(String.valueOf(fingers));
+        ((TextView) findViewById(R.id.fingers_total)).setText(
+                getString(R.string.fingers_total, cps * fingers));
 
         boolean hold = Prefs.mode(prefs) == Prefs.MODE_HOLD;
         findViewById(R.id.mode_hold_help).setVisibility(hold ? View.VISIBLE : View.GONE);
