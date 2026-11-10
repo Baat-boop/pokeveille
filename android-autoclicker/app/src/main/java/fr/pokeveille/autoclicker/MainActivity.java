@@ -70,6 +70,11 @@ public class MainActivity extends Activity {
             prefs.edit().putBoolean(Prefs.KEY_MACRO_ON, checked).apply();
             refresh();
         });
+        RadioGroup macroButtonGroup = findViewById(R.id.macro_button_group);
+        macroButtonGroup.check(Prefs.macroButtonMode(prefs) == Prefs.MACRO_BUTTON_SINGLE
+                ? R.id.macro_button_single : R.id.macro_button_continuous);
+        macroButtonGroup.setOnCheckedChangeListener((group, id) -> setInt(Prefs.KEY_MACRO_BUTTON_MODE,
+                id == R.id.macro_button_single ? Prefs.MACRO_BUTTON_SINGLE : Prefs.MACRO_BUTTON_CONTINUOUS));
         findViewById(R.id.macro_taps_minus).setOnClickListener(v ->
                 setInt(Prefs.KEY_MACRO_TAPS, Prefs.clampMacroTaps(Prefs.macroTaps(prefs) - 1)));
         findViewById(R.id.macro_taps_plus).setOnClickListener(v ->

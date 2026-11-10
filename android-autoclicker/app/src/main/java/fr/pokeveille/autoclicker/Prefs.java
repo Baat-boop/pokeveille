@@ -13,6 +13,7 @@ final class Prefs {
     static final String KEY_MACRO_ON = "macro_on";
     static final String KEY_MACRO_TAPS = "macro_taps";
     static final String KEY_MACRO_DELAY = "macro_delay";
+    static final String KEY_MACRO_BUTTON_MODE = "macro_button_mode";
 
     static final int MODE_TOGGLE = 0;
     static final int MODE_HOLD = 1;
@@ -32,6 +33,9 @@ final class Prefs {
     static final int MIN_MACRO_DELAY = 10;
     static final int MAX_MACRO_DELAY = 300;
     static final int MACRO_DELAY_STEP = 10;
+
+    static final int MACRO_BUTTON_SINGLE = 0;
+    static final int MACRO_BUTTON_CONTINUOUS = 1;
 
     /** Crans du curseur et des boutons − / + : fins en bas, larges en haut. */
     static final int[] CPS_STEPS = {
@@ -77,6 +81,11 @@ final class Prefs {
 
     static int clampMacroDelay(int ms) {
         return Math.max(MIN_MACRO_DELAY, Math.min(MAX_MACRO_DELAY, ms));
+    }
+
+    /** Bouton ⚡ : une rafale par appui, ou rafales enchaînées jusqu'au prochain appui. */
+    static int macroButtonMode(SharedPreferences p) {
+        return p.getInt(KEY_MACRO_BUTTON_MODE, MACRO_BUTTON_CONTINUOUS);
     }
 
     /** Touche de la macro : l'autre touche de volume que celle de l'auto-clicker. */

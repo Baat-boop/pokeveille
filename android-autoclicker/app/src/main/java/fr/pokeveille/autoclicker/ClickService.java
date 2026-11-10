@@ -39,7 +39,8 @@ import android.widget.Toast;
  * chaque clic injecté annule le geste réel en cours, le « lever » du doigt n'arriverait jamais.
  *
  * Deux cibles : la rouge reçoit l'auto-clic continu, la bleue (facultative) reçoit la macro,
- * une rafale de quelques clics rapprochés déclenchée par l'autre touche de volume ou ⚡.
+ * une rafale de quelques clics rapprochés déclenchée par l'autre touche de volume (rafales
+ * enchaînées tant qu'elle est maintenue) ou par le bouton flottant ⚡.
  */
 public class ClickService extends AccessibilityService
         implements SharedPreferences.OnSharedPreferenceChangeListener {
@@ -48,7 +49,6 @@ public class ClickService extends AccessibilityService
     private static final int COLOR_STOP = 0xFFC62828;
     private static final int COLOR_HOLD = 0xFF1565C0;
     private static final int COLOR_SMALL = 0xFF424242;
-    private static final int COLOR_MACRO = 0xFFEF6C00;
     private static final int COLOR_TARGET = 0xFFE53935;
     private static final int COLOR_MACRO_TARGET = 0xFF1E88E5;
     /** Laisse le temps à la cible de devenir « traversable » avant le premier clic. */
@@ -66,7 +66,8 @@ public class ClickService extends AccessibilityService
     private WindowManager.LayoutParams panelParams;
     private TextView mainButton;
     private TextView speedLabel;
-    private TextView macroButton;
+    private MacroButtonView macroButton;
+    private WindowManager.LayoutParams macroButtonParams;
     private TextView lockButton;
     private TargetView target;
     private WindowManager.LayoutParams targetParams;
@@ -75,6 +76,11 @@ public class ClickService extends AccessibilityService
     /** Cibles verrouillées : traversables en permanence, la macro part sans délai. */
     private boolean locked;
     private boolean macroFiring;
+    /** Rafales enchaînées : touche de la macro maintenue, ou bouton ⚡ en mode continu. */
+    private boolean macroRepeat;
+    private final Runnable nextMacro = () -> {
+        if (macroRepeat) fireMacro();
+    };
 
     private boolean screenOffRegistered;
     /** Taille d'écran pour laquelle la cible et le panneau sont placés. */
@@ -184,7 +190,11 @@ public class ClickService extends AccessibilityService
     protected boolean onKeyEvent(KeyEvent event) {
         if (panel == null) return false;
         if (Prefs.macroOn(prefs) && event.getKeyCode() == Prefs.macroKeyCode(prefs)) {
-            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) fireMacro();
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                startMacroRepeat();
+            } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                stopMacroRepeat(); // la rafale en cours va jusqu'au bout
+            }
             return true;
         }
         if (event.getKeyCode() != Prefs.hwKeyCode(prefs)) return false;
@@ -206,6 +216,7 @@ public class ClickService extends AccessibilityService
             if (Prefs.macroOn(prefs)) showMacroTarget();
             else hideMacroTarget();
         }
+        if (Prefs.KEY_MACRO_BUTTON_MODE.equals(key)) stopMacroRepeat();
         refreshPanel();
     }
 
@@ -247,6 +258,7 @@ public class ClickService extends AccessibilityService
 
     void hideOverlay() {
         stopClicking();
+        stopMacroRepeat();
         macroFiring = false;
         hideMacroTarget();
         removeQuietly(panel);
@@ -267,23 +279,70 @@ public class ClickService extends AccessibilityService
         return lp;
     }
 
+    /** Cible bleue et bouton ⚡ : affichés ensemble quand la macro est activée. */
     private void showMacroTarget() {
         if (macroTarget != null) return;
         Point screen = screenSize();
         macroTarget = new TargetView(this, COLOR_MACRO_TARGET);
+        macroButton = new MacroButtonView(this);
         try {
             // Par défaut en bas à droite, là où les jeux mettent souvent leurs boutons d'action.
             macroParams = addTarget(macroTarget, "macro", screen.x - dp(110), screen.y - dp(170));
+            int size = dp(72);
+            macroButtonParams = overlayParams(size, size);
+            macroButtonParams.x = prefs.getInt("macro_btn_x", screen.x / 2 - size / 2);
+            macroButtonParams.y = prefs.getInt("macro_btn_y", screen.y - size - dp(24));
+            clamp(macroButtonParams, size, size);
+            macroButton.setOnTouchListener(
+                    new Dragger(macroButton, macroButtonParams, "macro_btn", this::onMacroButton) {
+                @Override
+                boolean onDown() {
+                    // Pendant des clics automatiques, le « lever » du doigt n'arrive jamais.
+                    if (!clicking && !macroRepeat && !macroFiring) return false;
+                    onMacroButton();
+                    return true;
+                }
+            });
+            wm.addView(macroButton, macroButtonParams);
             updateTargetsTouchable();
         } catch (RuntimeException e) {
-            App.logError(this, "Affichage de la cible macro", e);
-            macroTarget = null;
+            App.logError(this, "Affichage de la macro", e);
+            hideMacroTarget();
         }
     }
 
     private void hideMacroTarget() {
+        stopMacroRepeat();
         removeQuietly(macroTarget);
+        removeQuietly(macroButton);
         macroTarget = null;
+        macroButton = null;
+    }
+
+    /** Bouton ⚡ : une rafale, ou marche / arrêt des rafales enchaînées (réglage). */
+    private void onMacroButton() {
+        if (Prefs.macroButtonMode(prefs) == Prefs.MACRO_BUTTON_CONTINUOUS) {
+            if (macroRepeat) stopMacroRepeat();
+            else startMacroRepeat();
+        } else {
+            fireMacro();
+        }
+    }
+
+    private void startMacroRepeat() {
+        if (macroTarget == null) return;
+        macroRepeat = true;
+        if (!macroFiring) fireMacro();
+        refreshPanel();
+    }
+
+    private void stopMacroRepeat() {
+        if (!macroRepeat) return;
+        macroRepeat = false;
+        handler.removeCallbacks(nextMacro);
+        updateTargetsTouchable();
+        if (!macroFiring) resumeClicking();
+        refreshPanel();
     }
 
     private void removeQuietly(View view) {
@@ -369,12 +428,20 @@ public class ClickService extends AccessibilityService
     private void macroDone() {
         if (!macroFiring) return;
         macroFiring = false;
+        if (macroRepeat) {
+            // L'auto-clic reste en pause tant que les rafales s'enchaînent.
+            handler.postDelayed(nextMacro, Prefs.macroDelay(prefs));
+            return;
+        }
         updateTargetsTouchable();
         refreshPanel();
-        if (clicking) {
-            nextBatchAt = SystemClock.uptimeMillis();
-            scheduleNextBatch();
-        }
+        resumeClicking();
+    }
+
+    private void resumeClicking() {
+        if (!clicking) return;
+        nextBatchAt = SystemClock.uptimeMillis();
+        scheduleNextBatch();
     }
 
     /**
@@ -437,13 +504,6 @@ public class ClickService extends AccessibilityService
         });
         root.addView(mainButton);
 
-        macroButton = roundText(dp(44), 20, COLOR_MACRO);
-        macroButton.setText("⚡");
-        onPress(macroButton, this::fireMacro);
-        LinearLayout.LayoutParams macroLp = new LinearLayout.LayoutParams(dp(44), dp(44));
-        macroLp.topMargin = dp(6);
-        root.addView(macroButton, macroLp);
-
         speedLabel = new TextView(this);
         speedLabel.setTextColor(0xFFFFFFFF);
         speedLabel.setTextSize(13);
@@ -490,8 +550,7 @@ public class ClickService extends AccessibilityService
         int cps = Prefs.cps(prefs);
         int fingers = Prefs.fingers(prefs);
         speedLabel.setText(fingers > 1 ? cps + "/s\n×" + fingers : cps + "/s");
-        macroButton.setVisibility(Prefs.macroOn(prefs) ? View.VISIBLE : View.GONE);
-        ((GradientDrawable) macroButton.getBackground()).setColor(macroFiring ? COLOR_STOP : COLOR_MACRO);
+        if (macroButton != null) macroButton.setActive(macroRepeat || macroFiring);
         lockButton.setText(locked ? "🔒" : "🔓");
         GradientDrawable bg = (GradientDrawable) mainButton.getBackground();
         if (clicking) {
@@ -528,7 +587,7 @@ public class ClickService extends AccessibilityService
      */
     private void updateTargetsTouchable() {
         setTouchable(target, targetParams, !locked && !clicking);
-        setTouchable(macroTarget, macroParams, !locked && !macroFiring);
+        setTouchable(macroTarget, macroParams, !locked && !macroFiring && !macroRepeat);
     }
 
     private static boolean isTouchable(WindowManager.LayoutParams lp) {
@@ -598,6 +657,7 @@ public class ClickService extends AccessibilityService
         stopClicking(); // le point visé ne correspond plus à rien
         moveProportionally(target, targetParams, placedFor, screen);
         if (macroTarget != null) moveProportionally(macroTarget, macroParams, placedFor, screen);
+        if (macroButton != null) moveProportionally(macroButton, macroButtonParams, placedFor, screen);
         moveProportionally(panel, panelParams, placedFor, screen);
         placedFor = screen;
     }

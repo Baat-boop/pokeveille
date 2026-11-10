@@ -8,7 +8,9 @@ Petite application Android (sans pub, sans Internet, sans root) qui clique à vo
   Contourne la limite de l'écran dans les jeux qui comptent chaque doigt (ex. 60 clics/s × 5 doigts = 300 clics/s).
 - **Bouton flottant** simple : ▶ démarre, ■ arrête.
 - **Macro rafale** (facultative) : une 2e cible, bleue, reçoit une courte rafale de clics (2 à 10, espacés de
-  10 à 300 ms) à chaque appui sur l'autre touche de volume ou sur ⚡. Exemple Agar.io : cible bleue sur
+  10 à 300 ms). Déclenchement par l'autre touche de volume (rafales enchaînées tant qu'elle est maintenue)
+  ou par le bouton rond ⚡ déplaçable (au choix : une rafale par appui, ou rafales en continu jusqu'au
+  prochain appui). Exemple Agar.io : cible bleue sur
   « Split », 4 clics à 50 ms = 16 morceaux ; cible rouge sur « Éjecter » en mode maintien = nourrir.
   🔒 verrouille les cibles pour que la rafale parte sans délai. Gardez les doigts hors de l'écran pendant
   la rafale (Android annule un doigt posé dès qu'un clic automatique part). N'utilisez les macros que là

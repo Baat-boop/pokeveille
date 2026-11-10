@@ -338,6 +338,28 @@
         </LinearLayout>
 
             <TextView
+                style="@style/Body"
+                android:layout_marginTop="10dp"
+                android:text="@string/macro_button_title"
+                android:textStyle="bold" />
+
+            <RadioGroup
+                android:id="@+id/macro_button_group"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <RadioButton
+                    android:id="@+id/macro_button_continuous"
+                    style="@style/Choice"
+                    android:text="@string/macro_button_continuous" />
+
+                <RadioButton
+                    android:id="@+id/macro_button_single"
+                    style="@style/Choice"
+                    android:text="@string/macro_button_single" />
+            </RadioGroup>
+
+            <TextView
                 android:id="@+id/macro_trigger"
                 style="@style/Body"
                 android:layout_marginTop="6dp" />

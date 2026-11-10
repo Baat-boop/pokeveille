@@ -30,11 +30,14 @@
     <string name="key_help">Tant que le bouton flottant est affiché, cette touche commande l\'auto-clicker au lieu du volume.</string>
 
     <string name="macro_title">5. Macro rafale</string>
-    <string name="macro_on">Activer la macro (cible bleue et bouton ⚡)</string>
+    <string name="macro_on">Activer la macro (cible bleue et bouton rond ⚡)</string>
+    <string name="macro_button_title">Bouton rond ⚡ à l\'écran</string>
+    <string name="macro_button_continuous">1 appui = rafales en continu, 1 appui = arrêt</string>
+    <string name="macro_button_single">1 appui = 1 rafale</string>
     <string name="macro_taps_label">clics par rafale</string>
     <string name="macro_delay_label">ms entre deux clics</string>
-    <string name="macro_trigger">Déclenchement : touche %1$s ou bouton ⚡ du panneau.</string>
-    <string name="macro_help">Placez la cible bleue sur le bouton à marteler (ex. « Split » dans Agar.io : 2 clics = double split, 4 = 16 morceaux). Verrouillez les cibles avec 🔒 pour que la rafale parte sans délai.\n\nGardez les doigts hors de l\'écran au moment de la rafale : Android annule un doigt posé dès qu\'un clic automatique part, et inversement. Utilisez les macros seulement là où le jeu les autorise.</string>
+    <string name="macro_trigger">Touche %1$s : rafales en continu tant qu\'elle est maintenue (un appui bref = une rafale).</string>
+    <string name="macro_help">Placez la cible bleue sur le bouton à marteler (ex. « Split » dans Agar.io : 2 clics = double split, 4 = 16 morceaux) et le bouton rond ⚡ où votre pouce tombe bien (il se déplace en le glissant). Verrouillez les cibles avec 🔒 pour que la rafale parte sans délai.\n\nGardez les doigts hors de l\'écran au moment de la rafale : Android annule un doigt posé dès qu\'un clic automatique part, et inversement. Utilisez les macros seulement là où le jeu les autorise.</string>
     <string name="overlay_show">Afficher le bouton flottant</string>
     <string name="overlay_hide">Masquer le bouton flottant</string>
 
