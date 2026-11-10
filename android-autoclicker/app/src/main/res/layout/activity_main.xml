@@ -241,6 +241,112 @@
             style="@style/Hint"
             android:text="@string/key_help" />
 
+        <!-- 5. Macro rafale -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="@string/macro_title" />
+
+        <CheckBox
+            android:id="@+id/macro_on"
+            style="@style/Choice"
+            android:text="@string/macro_on" />
+
+        <LinearLayout
+            android:id="@+id/macro_box"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/macro_taps_minus"
+                android:layout_width="56dp"
+                android:layout_height="wrap_content"
+                android:text="−"
+                android:textSize="20sp" />
+
+            <TextView
+                android:id="@+id/macro_taps_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="64dp"
+                android:gravity="center"
+                android:textColor="#FFFFFFFF"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/macro_taps_plus"
+                android:layout_width="56dp"
+                android:layout_height="wrap_content"
+                android:text="+"
+                android:textSize="20sp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/macro_taps_label"
+                android:textColor="#FFEEEEEE"
+                android:textSize="15sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/macro_delay_minus"
+                android:layout_width="56dp"
+                android:layout_height="wrap_content"
+                android:text="−"
+                android:textSize="20sp" />
+
+            <TextView
+                android:id="@+id/macro_delay_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="64dp"
+                android:gravity="center"
+                android:textColor="#FFFFFFFF"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/macro_delay_plus"
+                android:layout_width="56dp"
+                android:layout_height="wrap_content"
+                android:text="+"
+                android:textSize="20sp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/macro_delay_label"
+                android:textColor="#FFEEEEEE"
+                android:textSize="15sp" />
+        </LinearLayout>
+
+            <TextView
+                android:id="@+id/macro_trigger"
+                style="@style/Body"
+                android:layout_marginTop="6dp" />
+
+            <TextView
+                style="@style/Hint"
+                android:text="@string/macro_help" />
+        </LinearLayout>
+
         <Button
             android:id="@+id/overlay_toggle"
             android:layout_width="match_parent"

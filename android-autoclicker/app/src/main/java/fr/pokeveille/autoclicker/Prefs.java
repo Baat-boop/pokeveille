@@ -10,6 +10,9 @@ final class Prefs {
     static final String KEY_MODE = "mode";
     static final String KEY_HW = "hw_key";
     static final String KEY_FINGERS = "fingers";
+    static final String KEY_MACRO_ON = "macro_on";
+    static final String KEY_MACRO_TAPS = "macro_taps";
+    static final String KEY_MACRO_DELAY = "macro_delay";
 
     static final int MODE_TOGGLE = 0;
     static final int MODE_HOLD = 1;
@@ -23,6 +26,12 @@ final class Prefs {
     static final int DEFAULT_CPS = 10;
 
     static final int MAX_FINGERS = 10;
+
+    static final int MIN_MACRO_TAPS = 2;
+    static final int MAX_MACRO_TAPS = 10;
+    static final int MIN_MACRO_DELAY = 10;
+    static final int MAX_MACRO_DELAY = 300;
+    static final int MACRO_DELAY_STEP = 10;
 
     /** Crans du curseur et des boutons − / + : fins en bas, larges en haut. */
     static final int[] CPS_STEPS = {
@@ -46,6 +55,38 @@ final class Prefs {
 
     static int clampFingers(int fingers) {
         return Math.max(1, Math.min(MAX_FINGERS, fingers));
+    }
+
+    static boolean macroOn(SharedPreferences p) {
+        return p.getBoolean(KEY_MACRO_ON, false);
+    }
+
+    /** Nombre de clics de la rafale (ex. 4 = « 16 morceaux » dans Agar.io). */
+    static int macroTaps(SharedPreferences p) {
+        return clampMacroTaps(p.getInt(KEY_MACRO_TAPS, 4));
+    }
+
+    static int clampMacroTaps(int taps) {
+        return Math.max(MIN_MACRO_TAPS, Math.min(MAX_MACRO_TAPS, taps));
+    }
+
+    /** Délai entre deux clics de la rafale, en ms. */
+    static int macroDelay(SharedPreferences p) {
+        return clampMacroDelay(p.getInt(KEY_MACRO_DELAY, 50));
+    }
+
+    static int clampMacroDelay(int ms) {
+        return Math.max(MIN_MACRO_DELAY, Math.min(MAX_MACRO_DELAY, ms));
+    }
+
+    /** Touche de la macro : l'autre touche de volume que celle de l'auto-clicker. */
+    static int macroKeyCode(SharedPreferences p) {
+        return hwKey(p) == HW_VOL_UP ? KeyEvent.KEYCODE_VOLUME_DOWN : KeyEvent.KEYCODE_VOLUME_UP;
+    }
+
+    static String macroKeyLabel(Context context, SharedPreferences p) {
+        return context.getString(macroKeyCode(p) == KeyEvent.KEYCODE_VOLUME_UP
+                ? R.string.key_vol_up : R.string.key_vol_down);
     }
 
     static int mode(SharedPreferences p) {

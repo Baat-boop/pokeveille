@@ -37,6 +37,9 @@ import android.widget.Toast;
  *
  * Toute action déclenchée pendant que l'auto-clicker tourne se fait au POSER du doigt :
  * chaque clic injecté annule le geste réel en cours, le « lever » du doigt n'arriverait jamais.
+ *
+ * Deux cibles : la rouge reçoit l'auto-clic continu, la bleue (facultative) reçoit la macro,
+ * une rafale de quelques clics rapprochés déclenchée par l'autre touche de volume ou ⚡.
  */
 public class ClickService extends AccessibilityService
         implements SharedPreferences.OnSharedPreferenceChangeListener {
@@ -45,6 +48,9 @@ public class ClickService extends AccessibilityService
     private static final int COLOR_STOP = 0xFFC62828;
     private static final int COLOR_HOLD = 0xFF1565C0;
     private static final int COLOR_SMALL = 0xFF424242;
+    private static final int COLOR_MACRO = 0xFFEF6C00;
+    private static final int COLOR_TARGET = 0xFFE53935;
+    private static final int COLOR_MACRO_TARGET = 0xFF1E88E5;
     /** Laisse le temps à la cible de devenir « traversable » avant le premier clic. */
     private static final long FIRST_CLICK_DELAY_MS = 60;
     private static final int MAX_STROKES_PER_GESTURE = 20;
@@ -60,8 +66,15 @@ public class ClickService extends AccessibilityService
     private WindowManager.LayoutParams panelParams;
     private TextView mainButton;
     private TextView speedLabel;
+    private TextView macroButton;
+    private TextView lockButton;
     private TargetView target;
     private WindowManager.LayoutParams targetParams;
+    private TargetView macroTarget;
+    private WindowManager.LayoutParams macroParams;
+    /** Cibles verrouillées : traversables en permanence, la macro part sans délai. */
+    private boolean locked;
+    private boolean macroFiring;
 
     private boolean screenOffRegistered;
     /** Taille d'écran pour laquelle la cible et le panneau sont placés. */
@@ -84,7 +97,7 @@ public class ClickService extends AccessibilityService
     private final Runnable clickLoop = new Runnable() {
         @Override
         public void run() {
-            if (!clicking) return;
+            if (!clicking || macroFiring) return;
             int cps = Prefs.cps(prefs);
             double interval = 1000.0 / cps;
             int fingers = Prefs.fingers(prefs);
@@ -100,7 +113,8 @@ public class ClickService extends AccessibilityService
     };
 
     private void scheduleNextBatch() {
-        if (!clicking) return;
+        if (!clicking || macroFiring) return; // la fin de la macro relance la boucle
+        handler.removeCallbacks(clickLoop);
         nextBatchAt = Math.max(nextBatchAt, SystemClock.uptimeMillis());
         handler.postAtTime(clickLoop, (long) Math.ceil(nextBatchAt));
     }
@@ -168,7 +182,12 @@ public class ClickService extends AccessibilityService
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
-        if (panel == null || event.getKeyCode() != Prefs.hwKeyCode(prefs)) return false;
+        if (panel == null) return false;
+        if (Prefs.macroOn(prefs) && event.getKeyCode() == Prefs.macroKeyCode(prefs)) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) fireMacro();
+            return true;
+        }
+        if (event.getKeyCode() != Prefs.hwKeyCode(prefs)) return false;
         boolean hold = Prefs.mode(prefs) == Prefs.MODE_HOLD;
         if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
             if (hold || !clicking) startClicking();
@@ -183,6 +202,10 @@ public class ClickService extends AccessibilityService
     public void onSharedPreferenceChanged(SharedPreferences p, String key) {
         if (Prefs.KEY_MODE.equals(key) || Prefs.KEY_HW.equals(key)) stopClicking();
         // Le nombre de doigts et la vitesse sont relus à chaque paquet : pas besoin d'arrêter.
+        if (Prefs.KEY_MACRO_ON.equals(key) && panel != null) {
+            if (Prefs.macroOn(prefs)) showMacroTarget();
+            else hideMacroTarget();
+        }
         refreshPanel();
     }
 
@@ -207,14 +230,10 @@ public class ClickService extends AccessibilityService
         Point screen = screenSize();
         placedFor = screen;
 
-        target = new TargetView(this);
-        int targetSize = dp(56);
-        targetParams = overlayParams(targetSize, targetSize);
-        targetParams.x = prefs.getInt("target_x", screen.x / 2 - targetSize / 2);
-        targetParams.y = prefs.getInt("target_y", screen.y / 2 - targetSize / 2);
-        clamp(targetParams, targetSize, targetSize);
-        target.setOnTouchListener(new Dragger(target, targetParams, "target", null));
-        wm.addView(target, targetParams);
+        locked = false;
+        target = new TargetView(this, COLOR_TARGET);
+        targetParams = addTarget(target, "target", screen.x / 2, screen.y / 2);
+        if (Prefs.macroOn(prefs)) showMacroTarget();
 
         panel = buildPanel();
         panelParams = overlayParams(WindowManager.LayoutParams.WRAP_CONTENT,
@@ -228,10 +247,43 @@ public class ClickService extends AccessibilityService
 
     void hideOverlay() {
         stopClicking();
+        macroFiring = false;
+        hideMacroTarget();
         removeQuietly(panel);
         removeQuietly(target);
         panel = null;
         target = null;
+    }
+
+    /** Ajoute une cible déplaçable centrée par défaut sur (centerX, centerY). */
+    private WindowManager.LayoutParams addTarget(TargetView view, String prefKey, int centerX, int centerY) {
+        int size = dp(56);
+        WindowManager.LayoutParams lp = overlayParams(size, size);
+        lp.x = prefs.getInt(prefKey + "_x", centerX - size / 2);
+        lp.y = prefs.getInt(prefKey + "_y", centerY - size / 2);
+        clamp(lp, size, size);
+        view.setOnTouchListener(new Dragger(view, lp, prefKey, null));
+        wm.addView(view, lp);
+        return lp;
+    }
+
+    private void showMacroTarget() {
+        if (macroTarget != null) return;
+        Point screen = screenSize();
+        macroTarget = new TargetView(this, COLOR_MACRO_TARGET);
+        try {
+            // Par défaut en bas à droite, là où les jeux mettent souvent leurs boutons d'action.
+            macroParams = addTarget(macroTarget, "macro", screen.x - dp(110), screen.y - dp(170));
+            updateTargetsTouchable();
+        } catch (RuntimeException e) {
+            App.logError(this, "Affichage de la cible macro", e);
+            macroTarget = null;
+        }
+    }
+
+    private void hideMacroTarget() {
+        removeQuietly(macroTarget);
+        macroTarget = null;
     }
 
     private void removeQuietly(View view) {
@@ -249,11 +301,12 @@ public class ClickService extends AccessibilityService
         target.getLocationOnScreen(loc);
         clickX = loc[0] + target.getWidth() / 2f;
         clickY = loc[1] + target.getHeight() / 2f;
+        boolean wasTouchable = isTouchable(targetParams);
         clicking = true;
         session++;
-        setTargetTouchable(false); // sinon les clics tomberaient sur la cible elle-même
-        nextBatchAt = SystemClock.uptimeMillis() + FIRST_CLICK_DELAY_MS;
-        handler.postAtTime(clickLoop, (long) nextBatchAt);
+        updateTargetsTouchable(); // sinon les clics tomberaient sur la cible elle-même
+        nextBatchAt = SystemClock.uptimeMillis() + (wasTouchable ? FIRST_CLICK_DELAY_MS : 0);
+        if (!macroFiring) handler.postAtTime(clickLoop, (long) nextBatchAt);
         refreshPanel();
     }
 
@@ -261,8 +314,67 @@ public class ClickService extends AccessibilityService
         if (!clicking) return;
         clicking = false;
         handler.removeCallbacks(clickLoop);
-        setTargetTouchable(true);
+        updateTargetsTouchable();
         refreshPanel();
+    }
+
+    /**
+     * Rafale de clics sur la cible bleue (ex. split ×4 dans Agar.io), en un seul geste.
+     * L'auto-clic en cours fait une pause le temps de la rafale : un nouveau geste annulerait
+     * l'autre.
+     */
+    private void fireMacro() {
+        if (macroTarget == null || macroFiring) return;
+        int[] loc = new int[2];
+        macroTarget.getLocationOnScreen(loc);
+        float x = loc[0] + macroTarget.getWidth() / 2f;
+        float y = loc[1] + macroTarget.getHeight() / 2f;
+        boolean wasTouchable = isTouchable(macroParams);
+        macroFiring = true;
+        session++; // les paquets d'auto-clic encore en vol ne relancent plus la boucle
+        handler.removeCallbacks(clickLoop);
+        updateTargetsTouchable();
+        refreshPanel();
+
+        int taps = Prefs.macroTaps(prefs);
+        int delay = Prefs.macroDelay(prefs);
+        // Assez long pour qu'un jeu qui lit l'écran à chaque image voie chaque clic.
+        long duration = Math.max(1, Math.min(30, delay / 2));
+        Runnable send = () -> {
+            if (!macroFiring) return;
+            Path path = new Path();
+            path.moveTo(x, y);
+            GestureDescription.Builder gesture = new GestureDescription.Builder();
+            for (int i = 0; i < taps; i++) {
+                gesture.addStroke(new GestureDescription.StrokeDescription(path, (long) i * delay, duration));
+            }
+            boolean sent = dispatchGesture(gesture.build(), new GestureResultCallback() {
+                @Override
+                public void onCompleted(GestureDescription g) {
+                    macroDone();
+                }
+
+                @Override
+                public void onCancelled(GestureDescription g) {
+                    macroDone();
+                }
+            }, handler);
+            if (!sent) macroDone();
+        };
+        // Cible verrouillée : déjà traversable, la rafale part tout de suite.
+        if (wasTouchable) handler.postDelayed(send, FIRST_CLICK_DELAY_MS);
+        else send.run();
+    }
+
+    private void macroDone() {
+        if (!macroFiring) return;
+        macroFiring = false;
+        updateTargetsTouchable();
+        refreshPanel();
+        if (clicking) {
+            nextBatchAt = SystemClock.uptimeMillis();
+            scheduleNextBatch();
+        }
     }
 
     /**
@@ -325,6 +437,13 @@ public class ClickService extends AccessibilityService
         });
         root.addView(mainButton);
 
+        macroButton = roundText(dp(44), 20, COLOR_MACRO);
+        macroButton.setText("⚡");
+        onPress(macroButton, this::fireMacro);
+        LinearLayout.LayoutParams macroLp = new LinearLayout.LayoutParams(dp(44), dp(44));
+        macroLp.topMargin = dp(6);
+        root.addView(macroButton, macroLp);
+
         speedLabel = new TextView(this);
         speedLabel.setTextColor(0xFFFFFFFF);
         speedLabel.setTextSize(13);
@@ -346,12 +465,23 @@ public class ClickService extends AccessibilityService
         row.addView(plus, gap);
         root.addView(row);
 
+        LinearLayout bottom = new LinearLayout(this);
+        bottom.setOrientation(LinearLayout.HORIZONTAL);
+        bottom.setPadding(0, dp(6), 0, 0);
+        lockButton = roundText(dp(32), 14, COLOR_SMALL);
+        onPress(lockButton, () -> {
+            locked = !locked;
+            updateTargetsTouchable();
+            refreshPanel();
+        });
+        bottom.addView(lockButton);
         TextView close = roundText(dp(32), 15, COLOR_SMALL);
         close.setText("✕");
         onPress(close, this::hideOverlay);
         LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams(dp(32), dp(32));
-        closeLp.topMargin = dp(6);
-        root.addView(close, closeLp);
+        closeLp.leftMargin = dp(4);
+        bottom.addView(close, closeLp);
+        root.addView(bottom);
         return root;
     }
 
@@ -360,6 +490,9 @@ public class ClickService extends AccessibilityService
         int cps = Prefs.cps(prefs);
         int fingers = Prefs.fingers(prefs);
         speedLabel.setText(fingers > 1 ? cps + "/s\n×" + fingers : cps + "/s");
+        macroButton.setVisibility(Prefs.macroOn(prefs) ? View.VISIBLE : View.GONE);
+        ((GradientDrawable) macroButton.getBackground()).setColor(macroFiring ? COLOR_STOP : COLOR_MACRO);
+        lockButton.setText(locked ? "🔒" : "🔓");
         GradientDrawable bg = (GradientDrawable) mainButton.getBackground();
         if (clicking) {
             mainButton.setText("■");
@@ -389,12 +522,30 @@ public class ClickService extends AccessibilityService
         prefs.edit().putInt(Prefs.KEY_CPS, cps).apply();
     }
 
-    private void setTargetTouchable(boolean touchable) {
-        if (target == null || !target.isAttachedToWindow()) return;
-        if (touchable) targetParams.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-        else targetParams.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-        target.setAlpha(touchable ? 1f : 0.7f);
-        wm.updateViewLayout(target, targetParams);
+    /**
+     * Une cible doit laisser passer les clics qu'on envoie dessus : on ne peut la toucher
+     * (pour la déplacer) que quand elle ne reçoit rien et que les cibles ne sont pas verrouillées.
+     */
+    private void updateTargetsTouchable() {
+        setTouchable(target, targetParams, !locked && !clicking);
+        setTouchable(macroTarget, macroParams, !locked && !macroFiring);
+    }
+
+    private static boolean isTouchable(WindowManager.LayoutParams lp) {
+        return (lp.flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) == 0;
+    }
+
+    private void setTouchable(View view, WindowManager.LayoutParams lp, boolean touchable) {
+        if (view == null) return;
+        view.setAlpha(touchable ? 1f : 0.7f);
+        if (isTouchable(lp) == touchable) return;
+        if (touchable) lp.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        else lp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        try {
+            wm.updateViewLayout(view, lp);
+        } catch (RuntimeException ignored) {
+            // Fenêtre pas encore ajoutée ou déjà retirée.
+        }
     }
 
     private TextView roundText(int size, int textSp, int color) {
@@ -446,6 +597,7 @@ public class ClickService extends AccessibilityService
         if (screen.equals(placedFor)) return;
         stopClicking(); // le point visé ne correspond plus à rien
         moveProportionally(target, targetParams, placedFor, screen);
+        if (macroTarget != null) moveProportionally(macroTarget, macroParams, placedFor, screen);
         moveProportionally(panel, panelParams, placedFor, screen);
         placedFor = screen;
     }

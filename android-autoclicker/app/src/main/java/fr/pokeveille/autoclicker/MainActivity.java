@@ -12,6 +12,7 @@ import android.os.Bundle;
 import android.provider.Settings;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.SeekBar;
@@ -63,6 +64,21 @@ public class MainActivity extends Activity {
         findViewById(R.id.fingers_minus).setOnClickListener(v -> setFingers(Prefs.fingers(prefs) - 1));
         findViewById(R.id.fingers_plus).setOnClickListener(v -> setFingers(Prefs.fingers(prefs) + 1));
 
+        CheckBox macroOn = findViewById(R.id.macro_on);
+        macroOn.setChecked(Prefs.macroOn(prefs));
+        macroOn.setOnCheckedChangeListener((box, checked) -> {
+            prefs.edit().putBoolean(Prefs.KEY_MACRO_ON, checked).apply();
+            refresh();
+        });
+        findViewById(R.id.macro_taps_minus).setOnClickListener(v ->
+                setInt(Prefs.KEY_MACRO_TAPS, Prefs.clampMacroTaps(Prefs.macroTaps(prefs) - 1)));
+        findViewById(R.id.macro_taps_plus).setOnClickListener(v ->
+                setInt(Prefs.KEY_MACRO_TAPS, Prefs.clampMacroTaps(Prefs.macroTaps(prefs) + 1)));
+        findViewById(R.id.macro_delay_minus).setOnClickListener(v -> setInt(Prefs.KEY_MACRO_DELAY,
+                Prefs.clampMacroDelay(Prefs.macroDelay(prefs) - Prefs.MACRO_DELAY_STEP)));
+        findViewById(R.id.macro_delay_plus).setOnClickListener(v -> setInt(Prefs.KEY_MACRO_DELAY,
+                Prefs.clampMacroDelay(Prefs.macroDelay(prefs) + Prefs.MACRO_DELAY_STEP)));
+
         RadioGroup modeGroup = findViewById(R.id.mode_group);
         modeGroup.check(Prefs.mode(prefs) == Prefs.MODE_HOLD ? R.id.mode_hold : R.id.mode_toggle);
         modeGroup.setOnCheckedChangeListener((group, id) -> {
@@ -85,6 +101,7 @@ public class MainActivity extends Activity {
             int key = id == R.id.key_vol_up ? Prefs.HW_VOL_UP
                     : id == R.id.key_none ? Prefs.HW_NONE : Prefs.HW_VOL_DOWN;
             prefs.edit().putInt(Prefs.KEY_HW, key).apply();
+            refresh(); // la touche de la macro est l'autre touche de volume
         });
 
         findViewById(R.id.error_copy).setOnClickListener(v -> {
@@ -111,6 +128,11 @@ public class MainActivity extends Activity {
 
     private void setCps(int cps) {
         prefs.edit().putInt(Prefs.KEY_CPS, Prefs.clampCps(cps)).apply();
+        refresh();
+    }
+
+    private void setInt(String key, int value) {
+        prefs.edit().putInt(key, value).apply();
         refresh();
     }
 
@@ -166,6 +188,12 @@ public class MainActivity extends Activity {
         findViewById(R.id.mode_hold_help).setVisibility(hold ? View.VISIBLE : View.GONE);
         keyNone.setEnabled(!hold);
         if (hold && keyNone.isChecked()) ((RadioGroup) findViewById(R.id.key_group)).check(R.id.key_vol_down);
+
+        findViewById(R.id.macro_box).setVisibility(Prefs.macroOn(prefs) ? View.VISIBLE : View.GONE);
+        ((TextView) findViewById(R.id.macro_taps_value)).setText(String.valueOf(Prefs.macroTaps(prefs)));
+        ((TextView) findViewById(R.id.macro_delay_value)).setText(String.valueOf(Prefs.macroDelay(prefs)));
+        ((TextView) findViewById(R.id.macro_trigger)).setText(
+                getString(R.string.macro_trigger, Prefs.macroKeyLabel(this, prefs)));
 
         overlayToggle.setText(enabled && service.isOverlayShown()
                 ? R.string.overlay_hide : R.string.overlay_show);

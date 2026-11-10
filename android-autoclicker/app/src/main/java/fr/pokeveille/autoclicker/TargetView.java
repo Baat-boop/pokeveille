@@ -12,15 +12,16 @@ final class TargetView extends View {
     private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final float density;
 
-    TargetView(Context context) {
+    /** @param color couleur opaque de la cible (rouge : auto-clic, bleu : macro). */
+    TargetView(Context context, int color) {
         super(context);
         density = context.getResources().getDisplayMetrics().density;
-        fill.setColor(0x55E53935);
+        fill.setColor((color & 0x00FFFFFF) | 0x55000000);
         outline.setStyle(Paint.Style.STROKE);
         outline.setColor(0xFFFFFFFF);
         outline.setStrokeWidth(5 * density);
         ring.setStyle(Paint.Style.STROKE);
-        ring.setColor(0xFFE53935);
+        ring.setColor(color);
         ring.setStrokeWidth(2.5f * density);
     }
 
