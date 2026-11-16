@@ -59,6 +59,13 @@ function dist(a, b) {
   const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(s));
 }
+function bearing(a, b) {
+  const r = Math.PI / 180, y = Math.sin((b.lng - a.lng) * r) * Math.cos(b.lat * r);
+  const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lng - a.lng) * r);
+  return (Math.atan2(y, x) / r + 360) % 360;
+}
+const COMPASS = ['le nord', 'le nord-est', 'l’est', 'le sud-est', 'le sud', 'le sud-ouest', 'l’ouest', 'le nord-ouest'];
+const compass = (h) => COMPASS[Math.round(h / 45) % 8];
 function minutesLabel(n) {
   if (n < 60) return n + ' min';
   return Math.floor(n / 60) + ' h' + (n % 60 ? ' ' + String(n % 60).padStart(2, '0') : '');
@@ -409,7 +416,17 @@ function onEvent(ev) {
 function startGeo() {
   if (S.geoWatch != null || !navigator.geolocation) { if (!navigator.geolocation) S.geoErr = 'unsupported'; return; }
   S.geoWatch = navigator.geolocation.watchPosition((p) => {
-    S.fix = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy), t: Date.now() };
+    const c = p.coords, now = Date.now();
+    const here = { lat: c.latitude, lng: c.longitude };
+    let heading = S.fix ? S.fix.heading : null;
+    if (c.heading != null && !Number.isNaN(c.heading) && (c.speed || 0) > 0.7) {
+      heading = c.heading; S.anchor = here; S.lastMoveT = now;
+    } else if (!S.anchor) {
+      S.anchor = here;
+    } else if (dist(S.anchor, here) > Math.max(8, Math.min(c.accuracy, 25))) {
+      heading = bearing(S.anchor, here); S.anchor = here; S.lastMoveT = now;
+    }
+    S.fix = { ...here, acc: Math.round(c.accuracy), t: now, heading };
     S.geoErr = null;
     onFix();
   }, (e) => {
@@ -422,9 +439,14 @@ function onFix() {
   if (S.screen === 'lobby') renderLobbyMap();
   scheduleRender();
 }
+/** Direction de marche (degrés, 0 = nord) ou null si on ne bouge plus depuis une minute. */
+function myHeading() {
+  if (!S.fix || S.fix.heading == null || !S.lastMoveT || Date.now() - S.lastMoveT > 60000) return null;
+  return Math.round(S.fix.heading);
+}
 async function publishPos(kind, extra = {}) {
   if (!S.fix) return false;
-  const p = { lat: +S.fix.lat.toFixed(6), lng: +S.fix.lng.toFixed(6), acc: S.fix.acc, fixT: S.fix.t, t: Date.now(), kind, gameId: S.cfg.gameId, ...extra };
+  const p = { lat: +S.fix.lat.toFixed(6), lng: +S.fix.lng.toFixed(6), acc: S.fix.acc, hdg: myHeading(), fixT: S.fix.t, t: Date.now(), kind, gameId: S.cfg.gameId, ...extra };
   S.pos[S.me] = p;
   await pub('pos/' + S.me, p, { retain: true, qos: kind === 'live' ? 0 : 1 });
   if (kind !== 'live') onPos(S.me, p);
@@ -581,6 +603,36 @@ async function shareLink() {
 const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 let lobbyMap, lobbyZone, lobbyMe, gameMap, gameZone, selfMarker, selfAcc;
+let lobbyZoneKey = '', gameZoneKey = '';
+
+/** Points d'un cercle géographique (pour pouvoir griser tout ce qui est dehors). */
+function circlePts(z, n = 120) {
+  const R = 6371000, r = Math.PI / 180, lat1 = z.lat * r, lng1 = z.lng * r, d = z.r / R, pts = [];
+  for (let i = 0; i < n; i++) {
+    const b = (2 * Math.PI * i) / n;
+    const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(b));
+    const lng2 = lng1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+    pts.push([lat2 / r, lng2 / r]);
+  }
+  return pts;
+}
+/** Dessine la zone : extérieur assombri, liseré blanc et trait orange épais. Renvoie le groupe (ou null). */
+function drawZone(map, group, z) {
+  if (group) group.remove();
+  if (!z) return null;
+  const ring = circlePts(z);
+  const world = [[-89, -540], [89, -540], [89, 540], [-89, 540]];
+  const g = L.layerGroup([
+    L.polygon([world, ring], { stroke: false, fillColor: '#10121a', fillOpacity: 0.32, interactive: false, smoothFactor: 0 }),
+    L.circle([z.lat, z.lng], { radius: z.r, color: '#ffffff', weight: 10, opacity: 0.95, fill: false, interactive: false }),
+    L.circle([z.lat, z.lng], { radius: z.r, color: '#e8590c', weight: 5, opacity: 1, fill: false, interactive: false }),
+  ]).addTo(map);
+  g.bounds = L.latLng(z.lat, z.lng).toBounds(z.r * 2);
+  return g;
+}
+const zoneKey = (z) => (z ? z.lat + ',' + z.lng + ',' + z.r : '');
+/** Flèche de direction autour d'un marqueur. */
+const headingHtml = (h, cls) => (h == null ? '' : `<div class="hdg ${cls}" style="transform:rotate(${Math.round(h)}deg)"><i></i></div>`);
 const markers = {};
 let didFit = false;
 
@@ -598,17 +650,14 @@ let lobbyCentered = false;
 function renderLobbyMap() {
   ensureLobbyMap();
   const z = S.cfg && S.cfg.rules.zone;
-  if (z) {
-    if (!lobbyZone) lobbyZone = L.circle([z.lat, z.lng], { radius: z.r, color: '#e8590c', weight: 2, fillOpacity: 0.08 }).addTo(lobbyMap);
-    lobbyZone.setLatLng([z.lat, z.lng]); lobbyZone.setRadius(z.r);
-  } else if (lobbyZone) { lobbyZone.remove(); lobbyZone = null; }
+  if (zoneKey(z) !== lobbyZoneKey) { lobbyZoneKey = zoneKey(z); lobbyZone = drawZone(lobbyMap, lobbyZone, z); }
   if (S.fix) {
     if (!lobbyMe) lobbyMe = L.marker([S.fix.lat, S.fix.lng], { icon: L.divIcon({ className: 'pm', html: '<div class="me-dot"></div>', iconSize: [0, 0] }) }).addTo(lobbyMap);
     lobbyMe.setLatLng([S.fix.lat, S.fix.lng]);
   }
   if (!lobbyCentered && (z || S.fix)) {
     lobbyCentered = true;
-    if (z) lobbyMap.fitBounds(lobbyZone.getBounds(), { padding: [10, 10] });
+    if (z) lobbyMap.fitBounds(lobbyZone.bounds, { padding: [10, 10] });
     else lobbyMap.setView([S.fix.lat, S.fix.lng], 15);
   }
 }
@@ -622,12 +671,13 @@ function updateSelfMarker() {
   if (!gameMap || !S.fix) return;
   const ll = [S.fix.lat, S.fix.lng];
   const cls = roleOf(S.me) === 'F' ? 'F' : '';
+  const icon = L.divIcon({ className: 'pm', html: `${headingHtml(myHeading(), 'me ' + cls)}<div class="me-dot ${cls}"></div>`, iconSize: [0, 0] });
   if (!selfMarker) {
     selfAcc = L.circle(ll, { radius: S.fix.acc, color: '#1971c2', weight: 1, fillOpacity: 0.08, interactive: false }).addTo(gameMap);
-    selfMarker = L.marker(ll, { zIndexOffset: 1000, icon: L.divIcon({ className: 'pm', html: `<div class="me-dot ${cls}"></div>`, iconSize: [0, 0] }) }).addTo(gameMap);
+    selfMarker = L.marker(ll, { zIndexOffset: 1000, icon }).addTo(gameMap);
   }
   selfMarker.setLatLng(ll); selfAcc.setLatLng(ll); selfAcc.setRadius(S.fix.acc);
-  selfMarker.setIcon(L.divIcon({ className: 'pm', html: `<div class="me-dot ${cls}"></div>`, iconSize: [0, 0] }));
+  selfMarker.setIcon(icon);
 }
 /** Position d'un autre joueur que j'ai le droit de voir, ou null. */
 function visiblePos(id) {
@@ -643,10 +693,7 @@ function visiblePos(id) {
 function renderGameMap() {
   ensureGameMap();
   const z = S.cfg.rules.zone;
-  if (z) {
-    if (!gameZone) gameZone = L.circle([z.lat, z.lng], { radius: z.r, color: '#e8590c', weight: 3, fill: false, dashArray: '8 6', interactive: false }).addTo(gameMap);
-    gameZone.setLatLng([z.lat, z.lng]); gameZone.setRadius(z.r);
-  } else if (gameZone) { gameZone.remove(); gameZone = null; }
+  if (zoneKey(z) !== gameZoneKey) { gameZoneKey = zoneKey(z); gameZone = drawZone(gameMap, gameZone, z); }
   updateSelfMarker();
 
   const seen = new Set();
@@ -658,7 +705,7 @@ function renderGameMap() {
     const age = Date.now() - p.t;
     const old = p.kind === 'live' ? age > 90000 : false;
     const label = esc(nameOf(id)) + (p.kind === 'live' ? '' : ' · ' + (age < 45000 ? 'maintenant' : ago(p.t).replace('il y a ', '')));
-    const html = `<div class="pin ${role} ${old ? 'old' : ''}">${esc(nameOf(id).slice(0, 1).toUpperCase())}</div><div class="pin-label">${label}</div>`;
+    const html = `${old ? '' : headingHtml(p.hdg, role)}<div class="pin ${role} ${old ? 'old' : ''}">${esc(nameOf(id).slice(0, 1).toUpperCase())}</div><div class="pin-label">${label}</div>`;
     const icon = L.divIcon({ className: 'pm', html, iconSize: [0, 0] });
     if (!markers[id]) markers[id] = L.marker([p.lat, p.lng], { icon }).addTo(gameMap);
     else { markers[id].setLatLng([p.lat, p.lng]); markers[id].setIcon(icon); }
@@ -674,7 +721,7 @@ function fitAll() {
   if (S.fix) pts.push([S.fix.lat, S.fix.lng]);
   for (const m of Object.values(markers)) pts.push(m.getLatLng());
   let bounds = pts.length ? L.latLngBounds(pts) : null;
-  if (gameZone) bounds = bounds ? bounds.extend(gameZone.getBounds()) : gameZone.getBounds();
+  if (gameZone) bounds = bounds ? bounds.extend(gameZone.bounds) : gameZone.bounds;
   if (!bounds) return;
   const top = $('#hud').getBoundingClientRect().bottom + 10;
   const bottom = $('#sheet').getBoundingClientRect().height + 10;
@@ -815,6 +862,7 @@ function renderGame() {
     if (p) {
       let s = (p.kind === 'live' ? 'en direct' : 'vu·e ' + ago(p.t));
       if (S.fix) s += ' · à ' + fmtDist(dist(S.fix, p));
+      if (p.hdg != null) s += ' · va vers ' + compass(p.hdg);
       meta.push(s);
     } else if (base === 'F' && !caught && id !== S.me) meta.push('position cachée');
     if (!S.online[id]) meta.push('hors ligne');
@@ -1003,7 +1051,8 @@ $('#btn-zone-here').onclick = () => {
 };
 $('#zone-r').addEventListener('input', () => {
   $('#zone-r-val').textContent = fmtDist(+$('#zone-r').value);
-  if (lobbyZone) lobbyZone.setRadius(+$('#zone-r').value);
+  const z = S.cfg.rules.zone;
+  if (z) { const prev = { ...z, r: +$('#zone-r').value }; lobbyZoneKey = zoneKey(prev); lobbyZone = drawZone(lobbyMap, lobbyZone, prev); }
 });
 $('#zone-r').addEventListener('change', () => {
   const z = S.cfg.rules.zone;
