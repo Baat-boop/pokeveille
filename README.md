@@ -69,3 +69,12 @@ npm test                      # tests (filtres, retours en stock, anti-doublons�
 node src/check.js --data .data-local   # un passage en local (sans webhook : aucune alerte envoyée)
 node tools/serve.mjs          # aperçu sur http://localhost:8080/docs/?local
 ```
+
+## Bonus : Traque (Manhunt entre potes)
+
+Petit jeu de chasse à l'homme grandeur nature, dans `docs/manhunt/` : https://baat-boop.github.io/pokeveille/manhunt/
+
+- Une personne crée la partie et partage le lien ou le QR code. Les autres rejoignent avec le code à 6 caractères. Pas de compte, pas d'installation.
+- Fugitifs contre chasseurs : avance au départ, position des fugitifs révélée à intervalle régulier, radars pour les chasseurs, zone de jeu, chat, fin automatique.
+- Les téléphones se parlent via un relais MQTT public gratuit (EMQX, avec HiveMQ et Mosquitto en secours). Tout est chiffré avec le code de la partie. Les fugitifs n'envoient leur position qu'au moment d'une révélation.
+- Garder la page ouverte pendant la partie : l'écran reste allumé tout seul, mais un téléphone verrouillé n'envoie rien.
