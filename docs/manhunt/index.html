@@ -45,7 +45,8 @@
         <li>Ensuite, la position de chaque fugitif est <b>révélée</b> aux chasseurs à intervalle régulier (toutes les 5 min par défaut). Entre deux révélations, personne ne la voit.</li>
         <li>Les chasseurs ont quelques <b>radars</b> 📡 pour forcer une révélation de plus.</li>
         <li>Pour attraper un fugitif, il faut le <b>toucher</b>. Le fugitif ou le chasseur le déclare dans l'appli.</li>
-        <li>Sortir de la zone révèle ta position à tout le monde.</li>
+        <li>Sortir de la zone révèle ta position à tout le monde. La zone peut <b>rétrécir</b> au fil de la partie : la prochaine zone est dessinée en pointillés blancs.</li>
+        <li>Les fugitifs peuvent apparaître dans un <b>cercle</b> plutôt qu'en point exact. Quand un chasseur entre dans ce cercle, il rétrécit autour du fugitif.</li>
         <li>Les fugitifs gagnent s'il en reste au moins un à la fin du temps. Sinon, victoire des chasseurs.</li>
       </ol>
       <p class="hint">Garde l'appli ouverte pendant la partie : l'écran reste allumé tout seul, et ta position ne peut être envoyée que si la page est ouverte.</p>
@@ -109,6 +110,25 @@
             <option value="3">3</option><option value="5">5</option>
           </select>
         </label>
+        <label>Position des fugitifs
+          <select data-rule="fuzzy">
+            <option value="0">Exacte</option><option value="100">Cercle de 100 m</option><option value="200">Cercle de 200 m</option>
+            <option value="300">Cercle de 300 m</option><option value="500">Cercle de 500 m</option>
+          </select>
+        </label>
+        <label>Zone qui rétrécit
+          <select data-rule="shrink">
+            <option value="0">Non</option><option value="50">Jusqu'à 50 %</option><option value="30">Jusqu'à 30 %</option>
+            <option value="15">Jusqu'à 15 %</option>
+          </select>
+        </label>
+        <label>Rétrécit toutes les
+          <select data-rule="shrinkEvery">
+            <option value="2">2 min</option><option value="3">3 min</option><option value="5">5 min</option>
+            <option value="10">10 min</option><option value="15">15 min</option>
+          </select>
+        </label>
+        <p class="hint rules-note">Cercle : les chasseurs voient une zone où se trouve le fugitif, pas son point exact. Si un chasseur entre dans ce cercle, il rétrécit autour du fugitif.</p>
         <label class="check"><input type="checkbox" data-rule="caughtBecomesHunter"> Un fugitif attrapé devient chasseur</label>
         <label class="check"><input type="checkbox" data-rule="fugitivesSeeHunters"> Les fugitifs voient les chasseurs en direct</label>
       </div>
@@ -147,6 +167,7 @@
     <div class="hud-phase" id="hud-phase"></div>
     <div class="hud-count" id="hud-count"></div>
     <div class="hud-sub" id="hud-sub"></div>
+    <div class="hud-zone" id="hud-zone" hidden></div>
   </div>
 
   <div class="banner" id="banner" hidden></div>

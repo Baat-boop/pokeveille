@@ -21,7 +21,13 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const DEFAULT_RULES = {
   duration: 60, headStart: 5, interval: 5, pings: 2,
   caughtBecomesHunter: false, fugitivesSeeHunters: false, zone: null,
+  shrink: 30,       // la zone rétrécit jusqu'à 30 % de son rayon (0 = jamais)
+  shrinkEvery: 10,  // une étape de rétrécissement toutes les 10 min
+  fuzzy: 200,       // fugitifs montrés dans un cercle de 200 m (0 = position exacte)
 };
+const FUZZ_MIN = 40;          // le cercle d'un fugitif ne descend pas sous 40 m
+const FUZZ_SHRINK_EVERY = 30000; // au plus un rétrécissement du cercle toutes les 30 s
+const SHRINK_HOLD = 0.6;      // part de chaque étape où la zone reste fixe avant de se resserrer
 const LIVE_EVERY = 5000;        // chasseurs : position envoyée au plus toutes les 5 s
 const LIVE_KEEPALIVE = 20000;   // … et au moins toutes les 20 s
 const OUTZONE_EVERY = 30000;    // fugitif hors zone : position envoyée toutes les 30 s
@@ -63,6 +69,22 @@ function bearing(a, b) {
   const r = Math.PI / 180, y = Math.sin((b.lng - a.lng) * r) * Math.cos(b.lat * r);
   const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lng - a.lng) * r);
   return (Math.atan2(y, x) / r + 360) % 360;
+}
+/** Point à `d` mètres de `a`, dans la direction `brg` (radians). */
+function destination(a, d, brg) {
+  const R = 6371000, r = Math.PI / 180, lat1 = a.lat * r, lng1 = a.lng * r, dd = d / R;
+  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(dd) + Math.cos(lat1) * Math.sin(dd) * Math.cos(brg));
+  const lng2 = lng1 + Math.atan2(Math.sin(brg) * Math.sin(dd) * Math.cos(lat1), Math.cos(dd) - Math.sin(lat1) * Math.sin(lat2));
+  return { lat: lat2 / r, lng: lng2 / r };
+}
+/** Générateur pseudo-aléatoire : tous les téléphones obtiennent les mêmes tirages pour une même partie. */
+function seededRandom(seed) {
+  let h = 1779033703;
+  for (const ch of seed) { h = Math.imul(h ^ ch.charCodeAt(0), 3432918353); h = (h << 13) | (h >>> 19); }
+  return () => {
+    h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
 }
 const COMPASS = ['le nord', 'le nord-est', 'l’est', 'le sud-est', 'le sud', 'le sud-ouest', 'l’ouest', 'le nord-ouest'];
 const compass = (h) => COMPASS[Math.round(h / 45) % 8];
@@ -360,6 +382,7 @@ const pingTimes = () => {
 };
 
 function onCfg(data) {
+  data.rules = { ...DEFAULT_RULES, ...data.rules };
   const prev = S.cfg;
   S.cfg = data;
   if (!prev || prev.gameId !== data.gameId) {
@@ -386,6 +409,9 @@ function onPos(id, data) {
   if (data.kind === 'reveal') html = `📍 ${who} révélée${late}.`;
   else if (data.kind === 'ping') html = `📡 Radar : ${mine ? 'ta position a été révélée' : `<b>${esc(nameOf(id))}</b> repéré·e`}.`;
   else if (data.kind === 'outzone') html = `🚧 ${mine ? 'Tu es' : `<b>${esc(nameOf(id))}</b> est`} hors zone, position révélée.`;
+  else if (data.kind === 'shrink') html = mine
+    ? `🎯 Un chasseur est dans ton cercle : il rétrécit à ${fmtDist(data.r)}.`
+    : `🎯 ${data.by === S.me ? 'Tu es entré·e' : `<b>${esc(nameOf(data.by))}</b> est entré·e`} dans le cercle de <b>${esc(nameOf(id))}</b> : il rétrécit à ${fmtDist(data.r)} !`;
   else if (data.kind === 'final') html = `🏁 ${mine ? 'Ta cachette' : `Cachette de <b>${esc(nameOf(id))}</b>`} dévoilée.`;
   else return;
   const fresh = Date.now() - data.t < 60000;
@@ -446,16 +472,77 @@ function myHeading() {
 }
 async function publishPos(kind, extra = {}) {
   if (!S.fix) return false;
-  const p = { lat: +S.fix.lat.toFixed(6), lng: +S.fix.lng.toFixed(6), acc: S.fix.acc, hdg: myHeading(), fixT: S.fix.t, t: Date.now(), kind, gameId: S.cfg.gameId, ...extra };
+  let p = { lat: +S.fix.lat.toFixed(6), lng: +S.fix.lng.toFixed(6), acc: S.fix.acc, hdg: myHeading(), fixT: S.fix.t, t: Date.now(), kind, gameId: S.cfg.gameId, ...extra };
+  if (kind !== 'live' && kind !== 'final' && S.cfg.rules.fuzzy > 0) {
+    const circle = fuzzCircle(extra.r || S.cfg.rules.fuzzy);
+    p = { ...p, ...circle, acc: undefined };
+  }
   S.pos[S.me] = p;
   await pub('pos/' + S.me, p, { retain: true, qos: kind === 'live' ? 0 : 1 });
   if (kind !== 'live') onPos(S.me, p);
   return true;
 }
+/**
+ * Calendrier de la zone : après l'avance, une étape toutes les `shrinkEvery` minutes.
+ * Pendant chaque étape, la zone reste fixe (60 % du temps) puis glisse vers la suivante.
+ * Les centres sont tirés au sort avec la graine de la partie : identiques sur tous les téléphones.
+ */
+let zoneCache = { key: '', sched: null };
+function zoneSchedule() {
+  const c = S.cfg, r = c && c.rules, z = r && r.zone;
+  if (!z) return null;
+  const key = [c.gameId, c.status === 'lobby', c.startAt, z.lat, z.lng, z.r, r.shrink, r.shrinkEvery, r.headStart, r.duration].join('|');
+  if (zoneCache.key === key) return zoneCache.sched;
+  const circles = [{ lat: z.lat, lng: z.lng, r: z.r }];
+  let sched = { circles, n: 0 };
+  if (c.status !== 'lobby' && r.shrink > 0 && c.startAt) {
+    const release = c.startAt + r.headStart * MIN, end = c.startAt + r.duration * MIN;
+    const step = r.shrinkEvery * MIN;
+    const n = Math.max(0, Math.min(12, Math.floor(((end - release) * 0.85) / step)));
+    const rand = seededRandom(c.gameId + '|zone');
+    const rFinal = z.r * r.shrink / 100;
+    for (let i = 1; i <= n; i++) {
+      const prev = circles[i - 1];
+      const rad = z.r - ((z.r - rFinal) * i) / n;
+      const c2 = destination(prev, rand() * (prev.r - rad) * 0.7, rand() * 2 * Math.PI);
+      circles.push({ lat: c2.lat, lng: c2.lng, r: rad });
+    }
+    sched = { circles, n, release, step };
+  }
+  zoneCache = { key, sched };
+  return sched;
+}
+/** Zone en vigueur à l'instant t (+ la suivante et les horaires de l'étape en cours). */
+function zoneState(t = Date.now()) {
+  const sc = zoneSchedule();
+  if (!sc) return null;
+  const { circles, n } = sc;
+  if (!n || t < sc.release) return { cur: circles[0], next: n ? circles[1] : null, shrinkAt: n ? sc.release + SHRINK_HOLD * sc.step : null, endAt: n ? sc.release + sc.step : null, stage: 0, n };
+  const x = (t - sc.release) / sc.step, i = Math.floor(x);
+  if (i >= n) return { cur: circles[n], next: null, stage: n, n, final: true };
+  const t0 = sc.release + i * sc.step, shrinkAt = t0 + SHRINK_HOLD * sc.step, endAt = t0 + sc.step;
+  const a = circles[i], b = circles[i + 1];
+  let cur = a, shrinking = false;
+  if (t >= shrinkAt) {
+    const k = (t - shrinkAt) / (endAt - shrinkAt);
+    cur = { lat: a.lat + (b.lat - a.lat) * k, lng: a.lng + (b.lng - a.lng) * k, r: a.r + (b.r - a.r) * k };
+    shrinking = true;
+  }
+  return { cur, next: b, shrinkAt, endAt, stage: i, n, shrinking };
+}
+function currentZone() {
+  const st = zoneState();
+  return st ? st.cur : null;
+}
 function outOfZone() {
-  const z = S.cfg && S.cfg.rules.zone;
+  const z = currentZone();
   if (!z || !S.fix) return false;
   return dist(S.fix, z) > z.r;
+}
+/** Cercle (centre décalé au hasard) qui contient forcément ma position actuelle. */
+function fuzzCircle(r) {
+  const c2 = destination(S.fix, Math.sqrt(Math.random()) * r * 0.8, Math.random() * 2 * Math.PI);
+  return { lat: +c2.lat.toFixed(6), lng: +c2.lng.toFixed(6), r: Math.round(r) };
 }
 
 /** Ce que mon téléphone doit faire en ce moment (envoyer ma position, etc.). */
@@ -485,6 +572,18 @@ async function dutyTick() {
     if (ph.name === 'hunt') {
       addLog('release:' + gid, ph.release, '🔓 Les chasseurs sont lâchés !');
       if (now - ph.release < 3000 && !S.logKeys.has('release-beep:' + gid)) { S.logKeys.add('release-beep:' + gid); beep('alarm'); }
+    }
+
+    // Zone qui rétrécit : annonces
+    const zs = zoneState(now);
+    if (ph.name === 'hunt' && zs && zs.n && !zs.final) {
+      const tag = gid + ':' + zs.stage;
+      if (zs.shrinkAt - now <= 30000 && now < zs.shrinkAt && S.warnedShrink !== tag) {
+        S.warnedShrink = tag; beep('info');
+        const outNext = S.fix && dist(S.fix, zs.next) > zs.next.r;
+        toast(outNext ? '⭕ La zone rétrécit dans 30 s, et tu seras dehors ! Bouge.' : '⭕ La zone rétrécit dans 30 s', 4500);
+      }
+      if (zs.shrinking) addLog('shrink:' + tag, zs.shrinkAt, `⭕ La zone rétrécit (rayon ${fmtDist(zs.next.r)}).`);
     }
 
     // Sortie de zone (tout le monde est prévenu)
@@ -518,6 +617,20 @@ async function dutyTick() {
       }
       if (isOut && now - S.lastOutzone > OUTZONE_EVERY) {
         S.lastOutzone = now; await publishPos('outzone');
+      }
+      // Un chasseur entre dans mon cercle : il rétrécit autour de ma position actuelle.
+      const mine = S.pos[S.me];
+      if (ph.name === 'hunt' && c.rules.fuzzy > 0 && S.fix && mine && mine.gameId === gid && mine.r > FUZZ_MIN
+          && mine.kind !== 'live' && mine.kind !== 'final' && now - (S.lastShrink || 0) > FUZZ_SHRINK_EVERY) {
+        const intruder = Object.keys(S.pos).find((id) => {
+          const h = S.pos[id];
+          return id !== S.me && h.kind === 'live' && h.gameId === gid && roleOf(id) === 'H' && now - h.t < 30000 && dist(h, mine) <= mine.r;
+        });
+        if (intruder) {
+          S.lastShrink = now;
+          await publishPos('shrink', { r: Math.max(FUZZ_MIN, Math.round(mine.r / 2)), by: intruder });
+          beep('alarm'); toast(`⚠️ ${nameOf(intruder)} est entré·e dans ton cercle : il rétrécit !`, 4500);
+        }
       }
     } else if (role === 'H') {
       if (S.fix && (now - S.lastLive > LIVE_KEEPALIVE || (S.fix.t > S.lastLive && now - S.lastLive > LIVE_EVERY))) {
@@ -559,7 +672,7 @@ async function startGame() {
   if (!nF || !nH) { toast('Il faut au moins un fugitif et un chasseur.'); return; }
   const r = S.cfg.rules;
   const ok = await confirmBox('Lancer la partie ?',
-    `${nF} fugitif${nF > 1 ? 's' : ''} contre ${nH} chasseur${nH > 1 ? 's' : ''}. ${minutesLabel(r.headStart)} d'avance, révélation toutes les ${minutesLabel(r.interval)}, ${minutesLabel(r.duration)} au total.${r.zone ? '' : ' Aucune zone de jeu définie.'}`,
+    `${nF} fugitif${nF > 1 ? 's' : ''} contre ${nH} chasseur${nH > 1 ? 's' : ''}. ${minutesLabel(r.headStart)} d'avance, révélation toutes les ${minutesLabel(r.interval)}, ${minutesLabel(r.duration)} au total.${r.zone ? (r.shrink > 0 ? ' La zone rétrécit au fil du temps.' : '') : ' Aucune zone de jeu définie.'}${r.fuzzy > 0 ? ` Les fugitifs apparaissent dans un cercle de ${fmtDist(r.fuzzy)}.` : ''}`,
     'C’est parti !');
   if (!ok) return;
   await pubCfg({ status: 'running', startAt: Date.now(), gameId: randStr(8), roles, winner: null, endReason: null, endedAt: null });
@@ -603,7 +716,8 @@ async function shareLink() {
 const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 let lobbyMap, lobbyZone, lobbyMe, gameMap, gameZone, selfMarker, selfAcc;
-let lobbyZoneKey = '', gameZoneKey = '';
+let lobbyZoneKey = '', gameZoneKey = '', nextZoneLayer = null, nextZoneKey = '';
+const fuzzLayers = {};
 
 /** Points d'un cercle géographique (pour pouvoir griser tout ce qui est dehors). */
 function circlePts(z, n = 120) {
@@ -630,7 +744,20 @@ function drawZone(map, group, z) {
   g.bounds = L.latLng(z.lat, z.lng).toBounds(z.r * 2);
   return g;
 }
-const zoneKey = (z) => (z ? z.lat + ',' + z.lng + ',' + z.r : '');
+const zoneKey = (z) => (z ? z.lat.toFixed(5) + ',' + z.lng.toFixed(5) + ',' + Math.round(z.r) : '');
+/** Met à jour la zone en vigueur et le pointillé de la prochaine zone sur la carte de jeu. */
+function updateGameZone() {
+  if (!gameMap || !S.cfg) return;
+  const zs = S.cfg.status === 'lobby' ? null : zoneState();
+  const cur = zs ? zs.cur : null;
+  if (zoneKey(cur) !== gameZoneKey) { gameZoneKey = zoneKey(cur); gameZone = drawZone(gameMap, gameZone, cur); }
+  const next = zs && zs.next && !outcome() ? zs.next : null;
+  if (zoneKey(next) !== nextZoneKey) {
+    nextZoneKey = zoneKey(next);
+    if (nextZoneLayer) { nextZoneLayer.remove(); nextZoneLayer = null; }
+    if (next) nextZoneLayer = L.circle([next.lat, next.lng], { radius: next.r, color: '#ffffff', weight: 3, dashArray: '10 8', fill: false, interactive: false }).addTo(gameMap);
+  }
+}
 /** Flèche de direction autour d'un marqueur. */
 const headingHtml = (h, cls) => (h == null ? '' : `<div class="hdg ${cls}" style="transform:rotate(${Math.round(h)}deg)"><i></i></div>`);
 const markers = {};
@@ -693,8 +820,22 @@ function visiblePos(id) {
 function renderGameMap() {
   ensureGameMap();
   const z = S.cfg.rules.zone;
-  if (zoneKey(z) !== gameZoneKey) { gameZoneKey = zoneKey(z); gameZone = drawZone(gameMap, gameZone, z); }
+  updateGameZone();
   updateSelfMarker();
+
+  // Cercles des fugitifs (le mien aussi, pour savoir ce que voient les chasseurs)
+  const circles = {};
+  for (const id of Object.keys(S.players)) {
+    const p = id === S.me ? S.pos[id] : visiblePos(id);
+    if (p && p.r && p.gameId === S.cfg.gameId && p.kind !== 'live' && p.kind !== 'final' && !isCaught(id)) circles[id] = p;
+  }
+  for (const [id, p] of Object.entries(circles)) {
+    const mineC = id === S.me;
+    const style = { radius: p.r, color: mineC ? '#1971c2' : '#e03131', weight: 3, dashArray: mineC ? '4 6' : null, fillColor: mineC ? '#1971c2' : '#e03131', fillOpacity: mineC ? 0.06 : 0.14, interactive: false };
+    if (!fuzzLayers[id]) fuzzLayers[id] = L.circle([p.lat, p.lng], style).addTo(gameMap);
+    else { fuzzLayers[id].setLatLng([p.lat, p.lng]); fuzzLayers[id].setStyle(style); fuzzLayers[id].setRadius(p.r); }
+  }
+  for (const id of Object.keys(fuzzLayers)) if (!circles[id]) { fuzzLayers[id].remove(); delete fuzzLayers[id]; }
 
   const seen = new Set();
   for (const id of Object.keys(S.players)) {
@@ -704,8 +845,8 @@ function renderGameMap() {
     const role = p.kind === 'live' ? 'H' : 'F';
     const age = Date.now() - p.t;
     const old = p.kind === 'live' ? age > 90000 : false;
-    const label = esc(nameOf(id)) + (p.kind === 'live' ? '' : ' · ' + (age < 45000 ? 'maintenant' : ago(p.t).replace('il y a ', '')));
-    const html = `${old ? '' : headingHtml(p.hdg, role)}<div class="pin ${role} ${old ? 'old' : ''}">${esc(nameOf(id).slice(0, 1).toUpperCase())}</div><div class="pin-label">${label}</div>`;
+    const label = esc(nameOf(id)) + (p.kind === 'live' ? '' : ' · ' + (age < 45000 ? 'maintenant' : ago(p.t).replace('il y a ', ''))) + (p.r ? ' · ≈' + fmtDist(p.r) : '');
+    const html = `${old ? '' : headingHtml(p.hdg, role)}<div class="pin ${role} ${old ? 'old' : ''} ${p.r ? 'fuzzy' : ''}">${esc(nameOf(id).slice(0, 1).toUpperCase())}</div><div class="pin-label">${label}</div>`;
     const icon = L.divIcon({ className: 'pm', html, iconSize: [0, 0] });
     if (!markers[id]) markers[id] = L.marker([p.lat, p.lng], { icon }).addTo(gameMap);
     else { markers[id].setLatLng([p.lat, p.lng]); markers[id].setIcon(icon); }
@@ -798,8 +939,9 @@ function renderLobby() {
   // Zone
   const z = c.rules.zone;
   $('#zone-ctrl').hidden = !host;
+  const shrinkTxt = z && c.rules.shrink > 0 ? ` Elle rétrécira jusqu'à ${fmtDist(z.r * c.rules.shrink / 100)}, une étape toutes les ${minutesLabel(c.rules.shrinkEvery)}.` : '';
   $('#zone-hint').textContent = z
-    ? `Cercle de ${fmtDist(z.r)} de rayon.` + (host ? ' Touche la carte pour déplacer le centre.' : '')
+    ? `Cercle de ${fmtDist(z.r)} de rayon.` + shrinkTxt + (host ? ' Touche la carte pour déplacer le centre.' : '')
     : (host ? 'Aucune zone pour l’instant. Touche la carte ou « Centrer sur moi » pour en créer une.' : 'Pas de zone définie : on joue partout.');
   const rr = $('#zone-r');
   if (document.activeElement !== rr) rr.value = z ? z.r : 1000;
@@ -861,7 +1003,10 @@ function renderGame() {
     }
     if (p) {
       let s = (p.kind === 'live' ? 'en direct' : 'vu·e ' + ago(p.t));
-      if (S.fix) s += ' · à ' + fmtDist(dist(S.fix, p));
+      if (S.fix && p.r) {
+        const d = dist(S.fix, p);
+        s += ` · cercle de ${fmtDist(p.r)} · ` + (d <= p.r ? '<b>tu es dans son cercle !</b>' : 'à ' + fmtDist(d - p.r));
+      } else if (S.fix) s += ' · à ' + fmtDist(dist(S.fix, p));
       if (p.hdg != null) s += ' · va vers ' + compass(p.hdg);
       meta.push(s);
     } else if (base === 'F' && !caught && id !== S.me) meta.push('position cachée');
@@ -931,6 +1076,19 @@ function renderHud(ph, out, role, now) {
   count.textContent = countText;
   count.classList.toggle('hot', hot);
   $('#hud-sub').textContent = sub;
+  const zs = !out && ph.name === 'hunt' ? zoneState(now) : null;
+  let zt = '';
+  if (zs && zs.n) {
+    if (zs.final) zt = `⭕ Zone finale · rayon ${fmtDist(zs.cur.r)}`;
+    else if (zs.shrinking) zt = `⭕ La zone rétrécit… ${fmtDist(zs.cur.r)} → ${fmtDist(zs.next.r)}`;
+    else zt = `⭕ Zone : rétrécit dans ${clock(zs.shrinkAt - now)}`;
+  } else if (!out && ph.name === 'head' && zs === null) {
+    const z0 = zoneState(now);
+    if (z0 && z0.n) zt = `⭕ La zone rétrécira ${z0.n} fois`;
+  }
+  const hz = $('#hud-zone');
+  hz.hidden = !zt; hz.textContent = zt;
+  hz.classList.toggle('hot', !!(zs && (zs.shrinking || (zs.shrinkAt && zs.shrinkAt - now <= 30000))));
 }
 
 function renderEnd(out) {
@@ -1126,11 +1284,13 @@ setInterval(() => {
   if (S.screen === 'game') {
     dutyTick();
     renderHud(phase(), outcome(), roleOf(S.me), Date.now());
+    updateGameZone();
     if (ticks % 5 === 0 || outcome()) scheduleRender();
   }
 }, 1000);
 
 // Démarrage
+if (qs.get('fast')) window.__traque = { S, zoneState };
 initHome();
 const h0 = parseHash();
 if (h0.code) $(store.get('traque.name') ? '#btn-join' : '#name').focus();

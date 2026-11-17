@@ -248,3 +248,9 @@ input:focus-visible, select:focus-visible, .btn:focus-visible { outline: 2px sol
 .hdg.F i { border-bottom-color: var(--fug); }
 .hdg.me i { top: -32px; border-bottom-color: #1971c2; }
 .hdg.me.F i { border-bottom-color: var(--fug); }
+
+/* Zone qui rétrécit, cercles des fugitifs */
+.hud-zone { margin-top: .35rem; font-size: .85rem; font-weight: 700; color: var(--accent); }
+.hud-zone.hot { color: var(--fug); }
+.pin.fuzzy { border-style: dashed; }
+.rules-form .rules-note { grid-column: 1 / -1; margin: 0; }
