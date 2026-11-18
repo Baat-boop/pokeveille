@@ -9,6 +9,8 @@
   <title>Traque — Manhunt entre potes</title>
   <meta name="description" content="Chasse à l'homme grandeur nature avec tes potes : fugitifs contre chasseurs, positions révélées à intervalles réguliers.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AF%3C/text%3E%3C/svg%3E">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="vendor/leaflet.css">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -25,6 +27,11 @@
       <span>Ton prénom</span>
       <input id="name" maxlength="20" autocomplete="nickname" placeholder="ex. Léa">
     </label>
+
+    <div class="field">
+      <span>Ton icône</span>
+      <div class="emoji-pick" id="emoji-pick" role="radiogroup" aria-label="Ton icône"></div>
+    </div>
 
     <button id="btn-resume" class="btn primary" hidden></button>
     <button id="btn-create" class="btn primary">Créer une partie</button>
@@ -47,6 +54,7 @@
         <li>Pour attraper un fugitif, il faut le <b>toucher</b>. Le fugitif ou le chasseur le déclare dans l'appli.</li>
         <li>Sortir de la zone révèle ta position à tout le monde. La zone peut <b>rétrécir</b> au fil de la partie : la prochaine zone est dessinée en pointillés blancs.</li>
         <li>Les fugitifs peuvent apparaître dans un <b>cercle</b> plutôt qu'en point exact. Quand un chasseur entre dans ce cercle, il rétrécit autour du fugitif.</li>
+        <li>Pouvoirs : les fugitifs peuvent <b>brouiller</b> une révélation ou lancer un <b>contre-radar</b> pour voir les chasseurs 30 s.</li>
         <li>Les fugitifs gagnent s'il en reste au moins un à la fin du temps. Sinon, victoire des chasseurs.</li>
       </ol>
       <p class="hint">Garde l'appli ouverte pendant la partie : l'écran reste allumé tout seul, et ta position ne peut être envoyée que si la page est ouverte.</p>
@@ -85,6 +93,7 @@
     <div class="card">
       <h2>Règles</h2>
       <div class="rules-form" id="rules-form">
+        <h3 class="rules-sub">Partie</h3>
         <label>Durée totale
           <select data-rule="duration">
             <option value="15">15 min</option><option value="20">20 min</option><option value="30">30 min</option>
@@ -104,18 +113,40 @@
             <option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option>
           </select>
         </label>
-        <label>Radars des chasseurs
-          <select data-rule="pings">
-            <option value="0">Aucun</option><option value="1">1</option><option value="2">2</option>
-            <option value="3">3</option><option value="5">5</option>
+        <label>Chasseurs mis à jour toutes les
+          <select data-rule="liveEvery">
+            <option value="5">5 s</option><option value="10">10 s</option><option value="30">30 s</option><option value="60">1 min</option>
           </select>
         </label>
-        <label>Position des fugitifs
+        <label class="check"><input type="checkbox" data-rule="caughtBecomesHunter"> Un fugitif attrapé devient chasseur</label>
+        <label class="check"><input type="checkbox" data-rule="fugitivesSeeHunters"> Les fugitifs voient les chasseurs en direct</label>
+
+        <h3 class="rules-sub">Fugitifs</h3>
+        <label>Position montrée
           <select data-rule="fuzzy">
-            <option value="0">Exacte</option><option value="100">Cercle de 100 m</option><option value="200">Cercle de 200 m</option>
-            <option value="300">Cercle de 300 m</option><option value="500">Cercle de 500 m</option>
+            <option value="0">Exacte</option><option value="50">Cercle de 50 m</option><option value="100">Cercle de 100 m</option>
+            <option value="150">Cercle de 150 m</option><option value="200">Cercle de 200 m</option><option value="300">Cercle de 300 m</option>
+            <option value="500">Cercle de 500 m</option><option value="750">Cercle de 750 m</option><option value="1000">Cercle de 1 km</option>
           </select>
         </label>
+        <label>Cercle trouvé : il devient
+          <select data-rule="fuzzShrink">
+            <option value="67">2/3 de sa taille</option><option value="50">2 fois plus petit</option><option value="33">3 fois plus petit</option>
+          </select>
+        </label>
+        <label>Cercle le plus petit
+          <select data-rule="fuzzMin">
+            <option value="20">20 m</option><option value="40">40 m</option><option value="75">75 m</option><option value="100">100 m</option>
+          </select>
+        </label>
+        <label>Alerte chasseur proche
+          <select data-rule="nearAlert">
+            <option value="0">Non</option><option value="50">À 50 m</option><option value="100">À 100 m</option><option value="200">À 200 m</option>
+          </select>
+        </label>
+        <p class="hint rules-note">Cercle : les chasseurs voient une zone où se trouve le fugitif, pas son point exact. Chaque fois qu'un chasseur entre dans le cercle, il rétrécit autour du fugitif (cercle n°2, n°3…) et le fugitif est prévenu.</p>
+
+        <h3 class="rules-sub">Zone</h3>
         <label>Zone qui rétrécit
           <select data-rule="shrink">
             <option value="0">Non</option><option value="50">Jusqu'à 50 %</option><option value="30">Jusqu'à 30 %</option>
@@ -128,10 +159,38 @@
             <option value="10">10 min</option><option value="15">15 min</option>
           </select>
         </label>
-        <p class="hint rules-note">Cercle : les chasseurs voient une zone où se trouve le fugitif, pas son point exact. Si un chasseur entre dans ce cercle, il rétrécit autour du fugitif.</p>
-        <label class="check"><input type="checkbox" data-rule="caughtBecomesHunter"> Un fugitif attrapé devient chasseur</label>
-        <label class="check"><input type="checkbox" data-rule="fugitivesSeeHunters"> Les fugitifs voient les chasseurs en direct</label>
+        <label>Couleur de la zone
+          <select data-rule="zoneColor" data-type="str">
+            <option value="orange">Orange</option><option value="rouge">Rouge</option><option value="rose">Rose</option>
+            <option value="violet">Violet</option><option value="bleu">Bleu</option><option value="vert">Vert</option>
+          </select>
+        </label>
+
+        <h3 class="rules-sub">Pouvoirs</h3>
+        <label>📡 Radars des chasseurs
+          <select data-rule="pings">
+            <option value="0">Aucun</option><option value="1">1</option><option value="2">2</option>
+            <option value="3">3</option><option value="5">5</option>
+          </select>
+        </label>
+        <label>🌫️ Brouillages par fugitif
+          <select data-rule="jams">
+            <option value="0">Aucun</option><option value="1">1</option><option value="2">2</option><option value="3">3</option>
+          </select>
+        </label>
+        <label>🔍 Contre-radars par fugitif
+          <select data-rule="counters">
+            <option value="0">Aucun</option><option value="1">1</option><option value="2">2</option><option value="3">3</option>
+          </select>
+        </label>
+        <p class="hint rules-note">Radar : révèle tous les fugitifs tout de suite. Brouillage : le fugitif saute sa prochaine révélation. Contre-radar : le fugitif voit tous les chasseurs pendant 30 s.</p>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>Rappels appli fermée</h2>
+      <p class="hint">Un rappel sur ton téléphone 1 min avant chaque révélation, même quand l'appli est fermée (avec l'appli gratuite ntfy).</p>
+      <button class="btn" data-act="reminders" style="margin-top:.6rem">🔔 Configurer les rappels</button>
     </div>
 
     <div class="card">
@@ -175,6 +234,8 @@
   <div class="fabs">
     <button class="fab" id="btn-me" aria-label="Centrer sur moi" title="Centrer sur moi">◎</button>
     <button class="fab" id="btn-fit" aria-label="Voir tout le monde" title="Voir tout le monde">⤢</button>
+    <button class="fab" id="btn-style" aria-label="Changer le fond de carte" title="Fond de carte">🗺️</button>
+    <button class="fab" id="btn-full" aria-label="Carte en plein écran" title="Plein écran">⛶</button>
   </div>
 
   <div class="sheet" id="sheet">
