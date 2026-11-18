@@ -1331,11 +1331,23 @@ async function shareLink() {
 /* ---------- cartes ---------- */
 /* Fonds de carte en haute définition ({r} = tuiles @2x sur les écrans de téléphone). */
 const OSM_ATTR = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+/* Fonds de carte gratuits et sans clé d'accès. (CARTO, utilisé avant, exige désormais une clé.) */
+const OSMFR_ATTR = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · tuiles <a href="https://www.openstreetmap.fr">OSM France</a>';
+const ESRI = (path) => `https://server.arcgisonline.com/ArcGIS/rest/services/${path}/MapServer/tile/{z}/{y}/{x}`;
 const MAP_STYLES = {
-  plan: { name: 'Plan', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', opts: { subdomains: 'abcd', maxZoom: 20 }, attr: OSM_ATTR + ' · © <a href="https://carto.com/attributions">CARTO</a>' },
-  sombre: { name: 'Sombre', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', opts: { subdomains: 'abcd', maxZoom: 20 }, attr: OSM_ATTR + ' · © <a href="https://carto.com/attributions">CARTO</a>' },
-  satellite: { name: 'Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', opts: { maxNativeZoom: 19, maxZoom: 20 }, attr: '© Esri, Maxar, Earthstar Geographics' },
-  osm: { name: 'OpenStreetMap', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', opts: { maxZoom: 19 }, attr: OSM_ATTR },
+  plan: { name: 'Plan', layers: [{ url: 'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', opts: { subdomains: 'abc', maxNativeZoom: 20, maxZoom: 20 } }], attr: OSMFR_ATTR },
+  // Mode sombre : le même plan, inversé en couleurs (aucun fournisseur gratuit de tuiles sombres sans clé).
+  sombre: { name: 'Sombre', dark: true, layers: [{ url: 'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', opts: { subdomains: 'abc', maxNativeZoom: 20, maxZoom: 20, className: 'tiles-dark' } }], attr: OSMFR_ATTR },
+  satellite: {
+    name: 'Satellite', dark: true,
+    layers: [
+      { url: ESRI('World_Imagery'), opts: { maxNativeZoom: 19, maxZoom: 20 } },
+      { url: ESRI('Reference/World_Transportation'), opts: { maxNativeZoom: 19, maxZoom: 20, opacity: 0.7 } },
+      { url: ESRI('Reference/World_Boundaries_and_Places'), opts: { maxNativeZoom: 19, maxZoom: 20 } },
+    ],
+    attr: '© Esri, Maxar, Earthstar Geographics, HERE',
+  },
+  osm: { name: 'OpenStreetMap', layers: [{ url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', opts: { maxNativeZoom: 19, maxZoom: 20 } }], attr: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' },
 };
 let mapStyle = store.get('traque.map') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'sombre' : 'plan');
 if (!MAP_STYLES[mapStyle]) mapStyle = 'plan';
@@ -1358,12 +1370,26 @@ function setupMap(map) {
   applyStyle(map);
 }
 function applyStyle(map) {
-  const st = MAP_STYLES[mapStyle];
+  const key = mapStyle, st = MAP_STYLES[key];
   if (map._tiles) map._tiles.remove();
-  map._tiles = L.tileLayer(st.url, { ...st.opts, detectRetina: false }).addTo(map);
-  map._tiles.bringToBack();
+  const layers = st.layers.map((l) => L.tileLayer(l.url, l.opts));
+  map._tiles = L.layerGroup(layers).addTo(map);
   map._info.setText(st.attr);
-  document.body.classList.toggle('map-dark', mapStyle !== 'plan' && mapStyle !== 'osm');
+  document.body.classList.toggle('map-dark', !!st.dark);
+  // Filet de sécurité : si le fond ne se charge pas (fournisseur en panne ou bloqué), on passe au suivant.
+  let ok = 0, ko = 0;
+  layers[0].on('tileload', () => { ok++; });
+  layers[0].on('tileerror', () => {
+    ko++;
+    if (ko === 6 && ok === 0 && mapStyle === key) {
+      const fallback = key === 'osm' ? 'plan' : 'osm';
+      if (store.get('traque.mapFailed') === fallback) return; // les deux sont KO : sans doute pas de réseau
+      store.set('traque.mapFailed', key);
+      mapStyle = fallback; store.set('traque.map', fallback);
+      for (const m of [lobbyMap, gameMap]) if (m) applyStyle(m);
+      toast(`🗺️ Le fond « ${st.name} » ne répond pas : passage à « ${MAP_STYLES[fallback].name} »`, 3500);
+    }
+  });
 }
 function cycleMapStyle() {
   const keys = Object.keys(MAP_STYLES);
