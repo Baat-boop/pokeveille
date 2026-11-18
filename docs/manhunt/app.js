@@ -2602,7 +2602,7 @@ setInterval(() => {
  * GitHub Pages laisse les navigateurs garder les fichiers jusqu'à 10 min. Au démarrage (et au retour sur la page),
  * on compare la version chargée à celle du site ; si elle est plus récente, on recharge sans cache.
  * À chaque modification de l'appli : changer APP_VERSION, version.txt et les ?v= de index.html. */
-const APP_VERSION = '2026-11-18d';
+const APP_VERSION = '2026-11-18e';
 async function checkUpdate() {
   try {
     if (S.screen === 'game' && S.cfg && S.cfg.status === 'running') return; // jamais en pleine partie

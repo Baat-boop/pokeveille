@@ -72,7 +72,9 @@ node tools/serve.mjs          # aperçu sur http://localhost:8080/docs/?local
 
 ## Bonus : Traque (Manhunt entre potes)
 
-Jeu de chasse à l'homme grandeur nature, dans `docs/manhunt/` : https://baat-boop.github.io/pokeveille/manhunt/
+Jeu de chasse à l'homme grandeur nature, dans `docs/manhunt/`, publié sur Cloudflare : https://traque.batandtab-e25.workers.dev/
+
+Publication : `CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_EMAIL=… CLOUDFLARE_API_KEY=… node tools/deploy-cloudflare.mjs` (le jeu est emballé dans un Worker Cloudflare). Penser à changer le numéro de version (`version.txt`, `APP_VERSION` dans `app.js`, `?v=` dans `index.html`) pour que les téléphones se mettent à jour.
 
 - Une personne crée la partie et partage le lien ou le QR code. Les autres rejoignent avec le code à 6 caractères. Pas de compte, pas d'installation (mais installable sur l'écran d'accueil).
 - Modes : classique, infection, cache-cache, capture du drapeau. Révélations régulières (point exact ou cercle qui rétrécit quand un chasseur y entre), zone qui rétrécit, zones interdites, prison, balises, radars, brouillage, contre-radar, riposte, mode anonyme, chat d'équipe, classement de la soirée, récap et replay de fin de partie.
