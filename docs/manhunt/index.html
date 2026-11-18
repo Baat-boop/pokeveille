@@ -54,7 +54,9 @@
         <li>Pour attraper un fugitif, il faut le <b>toucher</b>. Le fugitif ou le chasseur le déclare dans l'appli.</li>
         <li>Sortir de la zone révèle ta position à tout le monde. La zone peut <b>rétrécir</b> au fil de la partie : la prochaine zone est dessinée en pointillés blancs.</li>
         <li>Les fugitifs peuvent apparaître dans un <b>cercle</b> plutôt qu'en point exact. Quand un chasseur entre dans ce cercle, il rétrécit autour du fugitif.</li>
-        <li>Pouvoirs : les fugitifs peuvent <b>brouiller</b> une révélation ou lancer un <b>contre-radar</b> pour voir les chasseurs 30 s.</li>
+        <li>Prison (si l'organisateur en place une) : un fugitif attrapé va en prison ; un fugitif libre qui y entre libère tout le monde.</li>
+        <li>Zones interdites ⛔ : y entrer révèle ta position, comme une sortie de zone.</li>
+        <li>Pouvoirs : les fugitifs peuvent <b>brouiller</b> une révélation ou lancer un <b>contre-radar</b> pour voir les chasseurs 30 s, et <b>riposter</b> après un radar.</li>
         <li>Les fugitifs gagnent s'il en reste au moins un à la fin du temps. Sinon, victoire des chasseurs.</li>
       </ol>
       <p class="hint">Garde l'appli ouverte pendant la partie : l'écran reste allumé tout seul, et ta position ne peut être envoyée que si la page est ouverte.</p>
@@ -67,6 +69,7 @@
   <header class="topbar">
     <button class="icon-btn" id="btn-leave" aria-label="Quitter la partie">←</button>
     <div class="topbar-title">Salon</div>
+    <button class="gps" id="gps-lobby" data-act="gps" title="Précision du GPS"></button>
     <span class="conn" id="conn-lobby" title="Connexion"></span>
   </header>
 
@@ -120,6 +123,7 @@
         </label>
         <label class="check"><input type="checkbox" data-rule="caughtBecomesHunter"> Un fugitif attrapé devient chasseur</label>
         <label class="check"><input type="checkbox" data-rule="fugitivesSeeHunters"> Les fugitifs voient les chasseurs en direct</label>
+        <label class="check"><input type="checkbox" data-rule="anon"> Mode anonyme : les chasseurs voient des positions sans savoir quel fugitif est où</label>
 
         <h3 class="rules-sub">Fugitifs</h3>
         <label>Position montrée
@@ -183,6 +187,7 @@
             <option value="0">Aucun</option><option value="1">1</option><option value="2">2</option><option value="3">3</option>
           </select>
         </label>
+        <label class="check"><input type="checkbox" data-rule="riposte"> ↩️ Riposte : après un radar, chaque fugitif peut voir 30 s le chasseur qui l'a lancé</label>
         <p class="hint rules-note">Radar : révèle tous les fugitifs tout de suite. Brouillage : le fugitif saute sa prochaine révélation. Contre-radar : le fugitif voit tous les chasseurs pendant 30 s.</p>
       </div>
     </div>
@@ -196,6 +201,12 @@
     <div class="card">
       <h2>Zone de jeu</h2>
       <p class="hint" id="zone-hint"></p>
+      <div class="map-mode" id="map-mode" role="radiogroup" aria-label="Ce que tu places en touchant la carte">
+        <button type="button" role="radio" data-mode="zone" aria-checked="true">⭕ Zone</button>
+        <button type="button" role="radio" data-mode="prison" aria-checked="false">🔒 Prison</button>
+        <button type="button" role="radio" data-mode="nogo" aria-checked="false">⛔ Interdite</button>
+      </div>
+      <p class="hint" id="map-mode-hint"></p>
       <div id="lobby-map" class="lobby-map"></div>
       <div class="zone-ctrl" id="zone-ctrl">
         <button class="btn" id="btn-zone-here">Centrer sur moi</button>
@@ -203,6 +214,17 @@
           <input type="range" id="zone-r" min="100" max="5000" step="50">
         </label>
         <button class="btn ghost" id="btn-zone-clear">Pas de zone</button>
+      </div>
+      <div class="zone-ctrl" id="zone-extra">
+        <label class="range" id="nogo-r-box">Taille des zones interdites
+          <select id="nogo-r"><option value="50">50 m</option><option value="100" selected>100 m</option><option value="200">200 m</option><option value="400">400 m</option></select>
+        </label>
+        <button class="btn ghost small" id="btn-prison-clear">Retirer la prison</button>
+        <button class="btn ghost small" id="btn-nogo-clear">Effacer les zones interdites</button>
+      </div>
+      <div class="zone-saved" id="zone-saved-box">
+        <select id="zone-saved" aria-label="Zones enregistrées"></select>
+        <button class="btn small" id="btn-zone-save">💾 Enregistrer</button>
       </div>
     </div>
 
@@ -221,6 +243,7 @@
   <div class="hud" id="hud">
     <div class="hud-row">
       <span class="badge" id="hud-role"></span>
+      <button class="gps" id="gps-game" data-act="gps" title="Précision du GPS"></button>
       <span class="conn" id="conn-game" title="Connexion"></span>
     </div>
     <div class="hud-phase" id="hud-phase"></div>

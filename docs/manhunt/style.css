@@ -300,3 +300,19 @@ code.topic { display: inline-block; background: var(--surface-2); padding: .2rem
 .fabs { gap: 7px; }
 .leaflet-bottom.leaflet-left .leaflet-control { margin-left: 8px; }
 .leaflet-left .map-info { margin: 0 0 6px 8px; flex-direction: row-reverse; }
+
+/* Précision du GPS */
+.gps { appearance: none; border: 0; font: inherit; font-size: .75rem; font-weight: 700; padding: .2rem .55rem; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.gps.good { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.gps.mid { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
+.gps.bad { background: color-mix(in srgb, var(--fug) 18%, transparent); color: var(--fug); }
+.topbar .gps { margin-right: 4px; }
+
+/* Ce qu'on place sur la carte du salon */
+.map-mode { display: flex; gap: 4px; background: var(--surface-2); padding: 4px; border-radius: 12px; margin-top: .6rem; }
+.map-mode button { flex: 1; appearance: none; border: 0; background: transparent; color: var(--text); font: inherit; font-size: .88rem; font-weight: 600; padding: .5rem .3rem; border-radius: 9px; cursor: pointer; min-height: 40px; }
+.map-mode button[aria-checked=true] { background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.zone-saved { display: flex; gap: .5rem; margin-top: .7rem; }
+.zone-saved select { flex: 1; min-height: 40px; }
+#zone-extra:empty { display: none; }
+.spot { position: absolute; left: -14px; top: -16px; font-size: 1.5rem; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
