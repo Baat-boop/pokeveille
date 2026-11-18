@@ -31,7 +31,12 @@ const DEFAULT_RULES = {
   zoneColor: 'orange',
   jams: 1,          // brouillages par fugitif
   counters: 1,      // contre-radars par fugitif
+  riposte: true,    // après un radar, chaque fugitif peut voir le chasseur qui l'a lancé (30 s)
+  anon: false,      // mode anonyme : les chasseurs ne savent pas quel fugitif est où (et inversement)
+  prison: null,     // {lat, lng, r} : les fugitifs attrapés y vont, un fugitif libre qui y entre les libère
+  nogo: [],         // zones interdites [{lat, lng, r}]
 };
+const PRISON_R = 25;
 const ZONE_COLORS = { orange: '#e8590c', rouge: '#e03131', rose: '#d6336c', violet: '#9c36b5', bleu: '#1c7ed6', vert: '#2f9e44' };
 const EMOJIS = ['🦊', '🐺', '🐻', '🐼', '🐯', '🦁', '🐸', '🐵', '🦉', '🐙', '🦈', '🐲', '👻', '🤖', '👽', '🤠', '🥷', '🧙', '🦸', '🕵️', '💀', '🔥', '⚡', '🍕'];
 const COUNTER_MS = 30000;
@@ -254,7 +259,7 @@ function onMessage(topic, payload) {
         if (data) {
           S.pings[id] = data;
           if (S.cfg && data.gameId === S.cfg.gameId) {
-            for (const t of data.list) addLog('pinguse:' + id + ':' + t, t, `📡 <b>${esc(nameOf(id))}</b> lance un radar.`);
+            for (const t of data.list) addLog('pinguse:' + id + ':' + t, t, anonHidden(id) ? '📡 Un chasseur lance un radar.' : `📡 <b>${esc(nameOf(id))}</b> lance un radar.`);
           }
         } else delete S.pings[id];
         break;
@@ -379,13 +384,22 @@ function addLog(key, t, html, { notify = false } = {}) {
 }
 const nameOf = (id) => (S.players[id] && S.players[id].name) || 'Quelqu’un';
 const isHost = () => S.cfg && S.cfg.host === S.me;
-function isCaught(id) { const k = S.caught[id]; return !!k && !!S.cfg && k.gameId === S.cfg.gameId; }
+function isCaught(id) { const k = S.caught[id]; return !!k && !!S.cfg && k.gameId === S.cfg.gameId && !k.freed; }
 function baseRole(id) { return (S.cfg && S.cfg.roles && S.cfg.roles[id]) || (S.cfg && S.cfg.status === 'lobby' ? 'H' : 'S'); }
 function roleOf(id) {
   const r = baseRole(id);
-  if (r === 'F' && isCaught(id)) return S.cfg.rules.caughtBecomesHunter ? 'H' : 'S';
+  if (r === 'F' && isCaught(id)) return S.cfg.rules.caughtBecomesHunter && !S.cfg.rules.prison ? 'H' : 'S';
   return r;
 }
+/** Mode anonyme : les chasseurs ne savent pas quel fugitif est où, les fugitifs ne savent pas quel chasseur fait quoi. */
+function anonHidden(id) {
+  const c = S.cfg;
+  if (!c || !c.rules.anon || id === S.me || c.status === 'lobby' || outcome()) return false;
+  return roleOf(S.me) === 'F' ? baseRole(id) === 'H' : baseRole(id) === 'F';
+}
+/** Nom affichable dans le journal et sur la carte (« un fugitif » en mode anonyme). */
+const dn = (id) => (anonHidden(id) ? (baseRole(id) === 'F' ? 'un fugitif' : 'un chasseur') : nameOf(id));
+const dnb = (id) => (anonHidden(id) ? dn(id) : `<b>${esc(nameOf(id))}</b>`);
 const fugitives = () => Object.keys(S.cfg.roles || {}).filter((id) => S.cfg.roles[id] === 'F');
 
 function phase(now = Date.now()) {
@@ -442,17 +456,19 @@ function onPos(id, data) {
   S.pos[id] = data;
   if (!S.cfg || data.gameId !== S.cfg.gameId || data.kind === 'live') return;
   const mine = id === S.me;
-  const who = mine ? 'Ta position a été' : `Position de <b>${esc(nameOf(id))}</b>`;
+  const who = mine ? 'Ta position a été' : anonHidden(id) ? 'Position d’un fugitif' : `Position de <b>${esc(nameOf(id))}</b>`;
   const late = data.late ? ' (en retard)' : '';
   let html;
   if (data.kind === 'reveal') html = `📍 ${who} révélée${late}.`;
-  else if (data.kind === 'ping') html = `📡 Radar : ${mine ? 'ta position a été révélée' : `<b>${esc(nameOf(id))}</b> repéré·e`}.`;
-  else if (data.kind === 'outzone') html = `🚧 ${mine ? 'Tu es' : `<b>${esc(nameOf(id))}</b> est`} hors zone, position révélée.`;
+  else if (data.kind === 'ping') html = `📡 Radar : ${mine ? 'ta position a été révélée' : `${dnb(id)} repéré·e`}.`;
+  else if (data.kind === 'outzone') html = data.why === 'nogo'
+    ? `⛔ ${mine ? 'Tu es' : `${dnb(id)} est`} dans une zone interdite, position révélée.`
+    : `🚧 ${mine ? 'Tu es' : `${dnb(id)} est`} hors zone, position révélée.`;
   else if (data.kind === 'shrink') {
     const n = (data.lvl || 2) - 1;
     html = mine
-      ? `🎯 <b>${esc(nameOf(data.by))}</b> a trouvé ton cercle n°${n} : nouveau cercle n°${n + 1} de ${fmtDist(data.r)}.`
-      : `🎯 ${data.by === S.me ? 'Tu as' : `<b>${esc(nameOf(data.by))}</b> a`} trouvé le cercle n°${n} de <b>${esc(nameOf(id))}</b> → cercle n°${n + 1} (${fmtDist(data.r)}) !`;
+      ? `🎯 ${anonHidden(data.by) ? 'Un chasseur' : `<b>${esc(nameOf(data.by))}</b>`} a trouvé ton cercle n°${n} : nouveau cercle n°${n + 1} de ${fmtDist(data.r)}.`
+      : `🎯 ${data.by === S.me ? 'Tu as' : `${dnb(data.by)} a`} trouvé le cercle n°${n} de ${dnb(id)} → cercle n°${n + 1} (${fmtDist(data.r)}) !`;
   }
   else if (data.kind === 'final') html = `🏁 ${mine ? 'Ta cachette' : `Cachette de <b>${esc(nameOf(id))}</b>`} dévoilée.`;
   else return;
@@ -470,11 +486,21 @@ function onPos(id, data) {
 function onCaught(id, data) {
   S.caught[id] = data;
   if (!S.cfg || data.gameId !== S.cfg.gameId) return;
+  if (data.freed) {
+    addLog('freed:' + id + ':' + data.t, data.t, `🔓 <b>${esc(nameOf(id))}</b> a été libéré·e par <b>${esc(nameOf(data.by))}</b> !`, { notify: true });
+    if (Date.now() - data.t < 60000) {
+      beep('good');
+      if (id === S.me) { toast('🔓 Tu es libre ! Cours !', 5000); notify('Tu es libre !', `${nameOf(data.by)} t'a libéré·e.`); }
+      else if (roleOf(S.me) === 'H') toast(`🔓 ${nameOf(id)} s'est échappé·e de prison !`, 4000);
+    }
+    return;
+  }
   const by = data.by ? ` par <b>${esc(nameOf(data.by))}</b>` : '';
   addLog('caught:' + id + ':' + data.t, data.t, `🎯 <b>${esc(nameOf(id))}</b> s'est fait attraper${by} !`, { notify: true });
   if (Date.now() - data.t < 60000) {
     beep(id === S.me ? 'alarm' : 'good');
-    if (id === S.me) toast(S.cfg.rules.caughtBecomesHunter ? 'Attrapé·e ! Tu deviens chasseur 🔦' : 'Attrapé·e ! Tu passes spectateur 👀', 5000);
+    if (id === S.me) toast(S.cfg.rules.prison ? '🔒 Attrapé·e ! Va à la prison (🔒 sur la carte) et attends qu’on te libère.'
+      : S.cfg.rules.caughtBecomesHunter ? 'Attrapé·e ! Tu deviens chasseur 🔦' : 'Attrapé·e ! Tu passes spectateur 👀', 6000);
   }
 }
 function onUncaught(id) {
@@ -488,11 +514,50 @@ function onEvent(ev) {
 }
 
 /* ---------- position ---------- */
+/* Filtre de Kalman simple : lisse les sauts du GPS en tenant compte de la précision annoncée,
+   et ignore les positions très imprécises quand on en a une bien meilleure et récente. */
+const KF = { v: -1, lat: 0, lng: 0, t: 0, q: 3 /* m/s : on peut courir */ };
+function gpsFilter(m, now) {
+  if (KF.v < 0 || now - KF.t > 60000) { Object.assign(KF, { lat: m.lat, lng: m.lng, v: m.acc * m.acc, t: now }); return { lat: m.lat, lng: m.lng }; }
+  const cur = Math.sqrt(KF.v);
+  if (m.acc > 60 && m.acc > cur * 3 && now - KF.t < 30000) return null; // position Wi-Fi/antenne approximative : on garde la bonne
+  // Mesure précise mais très loin de l'estimation (GPS qui se recale, appli rouverte) : on la prend telle quelle.
+  if (m.acc <= 30 && dist(KF, m) > 3 * (m.acc + cur) + 20) { Object.assign(KF, { lat: m.lat, lng: m.lng, v: m.acc * m.acc, t: now }); return { lat: m.lat, lng: m.lng }; }
+  const dt = Math.max(0.05, (now - KF.t) / 1000);
+  KF.v += dt * KF.q * KF.q;
+  const k = KF.v / (KF.v + m.acc * m.acc);
+  KF.lat += k * (m.lat - KF.lat); KF.lng += k * (m.lng - KF.lng);
+  KF.v = (1 - k) * KF.v; KF.t = now;
+  return { lat: KF.lat, lng: KF.lng };
+}
+function gpsQuality() {
+  if (S.geoErr) return { cls: 'bad', txt: '📍 GPS ✕' };
+  if (!S.fix) return { cls: 'mid', txt: '📍 GPS…' };
+  const a = S.fix.acc, cls = a <= 20 ? 'good' : a <= 50 ? 'mid' : 'bad';
+  return { cls, txt: `📍 ±${a} m` };
+}
+function openGpsHelp() {
+  const q = gpsQuality();
+  ask('📍 Précision du GPS', `
+    <p>Précision actuelle : <b>${q.txt.replace('📍 ', '')}</b>. Moins de 20 m, c'est bien ; plus de 50 m, la position peut être fausse d'une rue.</p>
+    <p><b>Pourquoi c'est parfois imprécis :</b> entre les immeubles, sous les arbres ou à l'intérieur, le téléphone capte mal les satellites. Quand la « position précise » est coupée, il ne donne qu'une position approximative (Wi-Fi, antennes), parfois à plusieurs centaines de mètres.</p>
+    <ol class="steps">
+      <li><b>Android</b> : Paramètres › Localisation › active « Précision de la localisation Google » (ou « Améliorer la précision »). Dans Chrome, touche le cadenas à côté de l'adresse › Autorisations › Position : <b>précise</b>.</li>
+      <li><b>iPhone</b> : Réglages › Confidentialité et sécurité › Service de localisation › Safari (ou Chrome) › « Lorsque l'app est active » et <b>Position exacte</b> activée.</li>
+      <li>Laisse le <b>Wi-Fi activé</b>, même sans être connecté : en ville, il aide beaucoup.</li>
+      <li>Coupe l'<b>économiseur de batterie</b> pendant la partie.</li>
+      <li>Au début, reste <b>10 à 20 s dehors, à découvert</b>, le temps que le GPS se cale.</li>
+    </ol>
+    <p class="hint">L'appli lisse déjà les sauts de position, ignore les positions très approximatives quand elle en a une meilleure, et attend quelques secondes une bonne précision avant chaque révélation.</p>`,
+  [{ label: 'Fermer', value: null, cls: 'primary' }]);
+}
 function startGeo() {
   if (S.geoWatch != null || !navigator.geolocation) { if (!navigator.geolocation) S.geoErr = 'unsupported'; return; }
   S.geoWatch = navigator.geolocation.watchPosition((p) => {
     const c = p.coords, now = Date.now();
-    const here = { lat: c.latitude, lng: c.longitude };
+    const filtered = gpsFilter({ lat: c.latitude, lng: c.longitude, acc: Math.max(3, c.accuracy || 50) }, now);
+    if (!filtered) return;
+    const here = filtered;
     let heading = S.fix ? S.fix.heading : null;
     if (c.heading != null && !Number.isNaN(c.heading) && (c.speed || 0) > 0.7) {
       heading = c.heading; S.anchor = here; S.anchorT = now; S.lastMoveT = now;
@@ -511,7 +576,7 @@ function startGeo() {
   }, (e) => {
     S.geoErr = e.code === 1 ? 'denied' : 'unavailable';
     scheduleRender();
-  }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+  }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
 }
 function onFix() {
   if (S.screen === 'game') { updateSelfMarker(); dutyTick(); }
@@ -593,14 +658,19 @@ function currentZone() {
   const st = zoneState();
   return st ? st.cur : null;
 }
+/** 'out' (hors de la zone), 'nogo' (dans une zone interdite) ou false. */
 function outOfZone() {
+  if (!S.fix || !S.cfg) return false;
   const z = currentZone();
-  if (!z || !S.fix) return false;
-  return dist(S.fix, z) > z.r;
+  if (z && dist(S.fix, z) > z.r) return 'out';
+  if ((S.cfg.rules.nogo || []).some((n) => dist(S.fix, n) <= n.r)) return 'nogo';
+  return false;
 }
 /** Cercle (centre décalé au hasard) qui contient forcément ma position actuelle. */
 function fuzzCircle(r) {
-  const c2 = destination(S.fix, Math.sqrt(Math.random()) * r * 0.8, Math.random() * 2 * Math.PI);
+  // Le décalage tient compte de l'imprécision du GPS pour que le vrai joueur reste dans le cercle.
+  const maxOff = Math.max(0, r - (S.fix.acc || 0)) * 0.8;
+  const c2 = destination(S.fix, Math.sqrt(Math.random()) * maxOff, Math.random() * 2 * Math.PI);
   return { lat: +c2.lat.toFixed(6), lng: +c2.lng.toFixed(6), r: Math.round(r) };
 }
 
@@ -647,7 +717,10 @@ async function dutyTick() {
 
     // Sortie de zone (tout le monde est prévenu)
     const isOut = outOfZone();
-    if (isOut && !S.wasOut) { S.wasOut = true; beep('alarm'); notify('Hors zone !', 'Reviens dans la zone de jeu.'); }
+    if (isOut && !S.wasOut) {
+      S.wasOut = true; beep('alarm');
+      notify(isOut === 'nogo' ? 'Zone interdite !' : 'Hors zone !', isOut === 'nogo' ? 'Sors de la zone interdite.' : 'Reviens dans la zone de jeu.');
+    }
     if (!isOut && S.wasOut) { S.wasOut = false; toast('✅ De retour dans la zone', 2500); }
 
     // Brouillages : tout le monde voit passer les révélations brouillées
@@ -669,7 +742,9 @@ async function dutyTick() {
         const last = store.get(key, -1);
         if (ph.k > last && S.fix) {
           const late = now - (ph.release + ph.k * c.rules.interval * MIN) > 60000;
+          const due = ph.release + ph.k * c.rules.interval * MIN;
           if (jammed(S.me, ph.k)) store.set(key, ph.k);
+          else if (S.fix.acc > 35 && now - due < 15000) { /* on attend jusqu'à 15 s une meilleure précision */ }
           else if (await publishPos('reveal', { idx: ph.k, late, lvl: 1 })) store.set(key, ph.k);
         }
         // Avertissement 30 s avant la prochaine
@@ -688,7 +763,17 @@ async function dutyTick() {
         }
       }
       if (isOut && now - S.lastOutzone > OUTZONE_EVERY) {
-        S.lastOutzone = now; await publishPos('outzone', { lvl: 1 });
+        S.lastOutzone = now; await publishPos('outzone', { lvl: 1, why: isOut });
+      }
+      // Prison : un fugitif libre qui y entre libère tous les prisonniers
+      const pr = c.rules.prison;
+      if (pr && ph.name === 'hunt' && S.fix && now - (S.lastFree || 0) > 10000 && dist(S.fix, pr) <= pr.r + Math.min(S.fix.acc, 20)) {
+        const prisoners = fugitives().filter((id) => id !== S.me && isCaught(id));
+        if (prisoners.length) {
+          S.lastFree = now;
+          for (const id of prisoners) await pub('caught/' + id, { freed: true, by: S.me, t: now, gameId: gid }, { retain: true });
+          beep('good'); toast(`🔓 Tu as libéré ${prisoners.map(nameOf).join(', ')} !`, 4500);
+        }
       }
       // Alerte chasseur proche
       if (ph.name === 'hunt' && c.rules.nearAlert > 0 && S.fix) {
@@ -715,7 +800,7 @@ async function dutyTick() {
           S.lastShrink = now;
           const lvl = (mine.lvl || 1) + 1, nr = Math.max(c.rules.fuzzMin, Math.round((mine.r * c.rules.fuzzShrink) / 100));
           await publishPos('shrink', { r: nr, by: intruder, lvl });
-          const msg = `🎯 ${nameOf(intruder)} a trouvé ton cercle n°${lvl - 1} ! Nouveau cercle n°${lvl} : ${fmtDist(nr)}`;
+          const msg = `🎯 ${anonHidden(intruder) ? 'Un chasseur' : nameOf(intruder)} a trouvé ton cercle n°${lvl - 1} ! Nouveau cercle n°${lvl} : ${fmtDist(nr)}`;
           beep('alarm'); toast(msg, 5000); notify('Ton cercle a été trouvé', msg);
         }
       }
@@ -732,7 +817,7 @@ async function dutyTick() {
           const key = id + ':' + p.t;
           if (dist(S.fix, p) <= p.r && !S.inCircleAlerted[key]) {
             S.inCircleAlerted[key] = true; beep('good');
-            toast(`🎯 Tu es dans le cercle n°${p.lvl || 1} de ${nameOf(id)} !`, 3500);
+            toast(`🎯 Tu es dans le cercle n°${p.lvl || 1} de ${dn(id)} !`, 3500);
           }
         }
       }
@@ -772,7 +857,7 @@ async function startGame() {
   if (!nF || !nH) { toast('Il faut au moins un fugitif et un chasseur.'); return; }
   const r = S.cfg.rules;
   const ok = await confirmBox('Lancer la partie ?',
-    `${nF} fugitif${nF > 1 ? 's' : ''} contre ${nH} chasseur${nH > 1 ? 's' : ''}. ${minutesLabel(r.headStart)} d'avance, révélation toutes les ${minutesLabel(r.interval)}, ${minutesLabel(r.duration)} au total.${r.zone ? (r.shrink > 0 ? ' La zone rétrécit au fil du temps.' : '') : ' Aucune zone de jeu définie.'}${r.fuzzy > 0 ? ` Les fugitifs apparaissent dans un cercle de ${fmtDist(r.fuzzy)}.` : ''}`,
+    `${nF} fugitif${nF > 1 ? 's' : ''} contre ${nH} chasseur${nH > 1 ? 's' : ''}. ${minutesLabel(r.headStart)} d'avance, révélation toutes les ${minutesLabel(r.interval)}, ${minutesLabel(r.duration)} au total.${r.prison ? ' Prison active : les fugitifs attrapés peuvent être libérés.' : ''}${r.anon ? ' Mode anonyme.' : ''}${r.zone ? (r.shrink > 0 ? ' La zone rétrécit au fil du temps.' : '') : ' Aucune zone de jeu définie.'}${r.fuzzy > 0 ? ` Les fugitifs apparaissent dans un cercle de ${fmtDist(r.fuzzy)}.` : ''}`,
     'C’est parti !');
   if (!ok) return;
   await pubCfg({ status: 'running', startAt: Date.now(), gameId: randStr(8), roles, winner: null, endReason: null, endedAt: null });
@@ -812,21 +897,60 @@ function counterLeft(id) {
   return last ? Math.max(0, last + COUNTER_MS - Date.now()) : 0;
 }
 const counterActive = (id) => counterLeft(id) > 0;
+/** Dernier radar lancé (dans la limite autorisée) : { t, by }. */
+function lastPing() {
+  if (!S.cfg) return null;
+  const valid = pingTimes();
+  let best = null;
+  for (const [hid, p] of Object.entries(S.pings)) {
+    if (p.gameId !== S.cfg.gameId) continue;
+    for (const t of p.list) if (valid.includes(t) && (!best || t > best.t)) best = { t, by: hid };
+  }
+  return best;
+}
+function riposteAvailable() {
+  if (!S.cfg || !S.cfg.rules.riposte) return null;
+  const lp = lastPing();
+  if (!lp || Date.now() - lp.t > 60000) return null;
+  if (myPowers(S.me).some((x) => x.type === 'riposte' && x.pingT === lp.t)) return null;
+  return lp;
+}
+const riposteOn = (target) => myPowers(S.me).some((x) => x.type === 'riposte' && x.target === target && Date.now() - x.t < COUNTER_MS);
+function riposteLeft() {
+  const x = myPowers(S.me).filter((y) => y.type === 'riposte').sort((a, b) => b.t - a.t)[0];
+  return x ? { left: Math.max(0, x.t + COUNTER_MS - Date.now()), target: x.target } : { left: 0 };
+}
 function onPowers(id, data) {
   S.powers[id] = data;
   if (!S.cfg || data.gameId !== S.cfg.gameId) return;
   for (const x of data.list) {
     const me = id === S.me, who = me ? 'Tu' : `<b>${esc(nameOf(id))}</b>`;
+    const whoA = me ? 'Tu' : anonHidden(id) ? 'Un fugitif' : who;
     const html = x.type === 'jam'
-      ? `🌫️ ${who} ${me ? 'brouilles ta' : 'brouille sa'} prochaine révélation.`
-      : `🔍 ${who} ${me ? 'lances' : 'lance'} un contre-radar : ${me ? 'tu vois' : 'il voit'} les chasseurs pendant 30 s !`;
+      ? `🌫️ ${whoA} ${me ? 'brouilles ta' : 'brouille sa'} prochaine révélation.`
+      : x.type === 'riposte'
+        ? `↩️ ${whoA} ${me ? 'ripostes' : 'riposte'} au radar : ${me ? 'tu vois' : 'il voit'} ${x.target === S.me ? '<b>ta position</b>' : `<b>${esc(nameOf(x.target))}</b>`} pendant 30 s !`
+        : `🔍 ${whoA} ${me ? 'lances' : 'lance'} un contre-radar : ${me ? 'tu vois' : 'il voit'} les chasseurs pendant 30 s !`;
     const fresh = Date.now() - x.t < 30000 && !S.logKeys.has('pw:' + id + ':' + x.t);
     addLog('pw:' + id + ':' + x.t, x.t, html, { notify: true });
     if (fresh && !me && roleOf(S.me) === 'H') {
       beep('info');
-      toast(x.type === 'jam' ? `🌫️ ${nameOf(id)} brouille sa prochaine révélation` : `🔍 ${nameOf(id)} vous voit pendant 30 s !`, 4000);
+      const n = anonHidden(id) ? 'Un fugitif' : nameOf(id);
+      if (x.type === 'riposte') { if (x.target === S.me) { beep('alarm'); toast(`↩️ ${n} a riposté : il voit ta position 30 s !`, 4500); } }
+      else toast(x.type === 'jam' ? `🌫️ ${n} brouille sa prochaine révélation` : `🔍 ${n} vous voit pendant 30 s !`, 4000);
     }
   }
+}
+async function useRiposte() {
+  const lp = riposteAvailable();
+  if (!lp) return;
+  const entry = { type: 'riposte', t: Date.now(), target: lp.by, pingT: lp.t };
+  const data = { gameId: S.cfg.gameId, list: [...myPowers(S.me), entry] };
+  S.powers[S.me] = data;
+  await pub('pw/' + S.me, data, { retain: true });
+  onPowers(S.me, data);
+  setTimeout(() => { if (markers[lp.by] && gameMap) gameMap.setView(markers[lp.by].getLatLng(), Math.max(gameMap.getZoom(), 16)); }, 500);
+  scheduleRender();
 }
 async function usePower(type) {
   const ph = phase(), r = S.cfg.rules;
@@ -1001,6 +1125,23 @@ function circlePts(z, n = 120) {
   return pts;
 }
 /** Dessine la zone : extérieur assombri, liseré blanc et trait orange épais. Renvoie le groupe (ou null). */
+/** Prison (🔒) et zones interdites (⛔), dessinées sur une carte. */
+function drawExtras(map, group, rules) {
+  if (group) group.remove();
+  const g = L.layerGroup();
+  for (const n of rules.nogo || []) {
+    L.circle([n.lat, n.lng], { radius: n.r, color: '#c92a2a', weight: 3, dashArray: '6 5', fillColor: '#e03131', fillOpacity: 0.28, interactive: false }).addTo(g);
+    L.marker([n.lat, n.lng], { interactive: false, icon: L.divIcon({ className: 'pm', html: '<div class="spot">⛔</div>', iconSize: [0, 0] }) }).addTo(g);
+  }
+  if (rules.prison) {
+    const pr = rules.prison;
+    L.circle([pr.lat, pr.lng], { radius: pr.r, color: '#212529', weight: 3, dashArray: '4 4', fillColor: '#495057', fillOpacity: 0.3, interactive: false }).addTo(g);
+    L.marker([pr.lat, pr.lng], { interactive: false, icon: L.divIcon({ className: 'pm', html: '<div class="spot">🔒</div><div class="pin-label">Prison</div>', iconSize: [0, 0] }) }).addTo(g);
+  }
+  return g.addTo(map);
+}
+const extrasKey = (r) => JSON.stringify([r.prison, r.nogo]);
+let lobbyExtras = null, lobbyExtrasKey = '', gameExtras = null, gameExtrasKey = '';
 const zoneColor = () => ZONE_COLORS[(S.cfg && S.cfg.rules.zoneColor) || 'orange'] || ZONE_COLORS.orange;
 function drawZone(map, group, z) {
   if (group) group.remove();
@@ -1040,8 +1181,18 @@ function ensureLobbyMap() {
   setupMap(lobbyMap);
   lobbyMap.on('click', (e) => {
     if (!isHost()) return;
+    const pt = { lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6) };
+    if (S.mapMode === 'prison') { pubRules({ prison: { ...pt, r: PRISON_R } }); return; }
+    if (S.mapMode === 'nogo') {
+      const list = S.cfg.rules.nogo || [];
+      const hit = list.findIndex((n) => dist(n, pt) <= n.r);
+      if (hit >= 0) pubRules({ nogo: list.filter((_, i) => i !== hit) });
+      else if (list.length >= 8) toast('8 zones interdites au maximum.');
+      else pubRules({ nogo: [...list, { ...pt, r: +$('#nogo-r').value }] });
+      return;
+    }
     const r = (S.cfg.rules.zone && S.cfg.rules.zone.r) || 1000;
-    pubRules({ zone: { lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6), r } });
+    pubRules({ zone: { ...pt, r } });
   });
 }
 let lobbyCentered = false;
@@ -1049,8 +1200,9 @@ function renderLobbyMap() {
   ensureLobbyMap();
   const z = S.cfg && S.cfg.rules.zone;
   if (zoneKey(z) !== lobbyZoneKey) { lobbyZoneKey = zoneKey(z); lobbyZone = drawZone(lobbyMap, lobbyZone, z); }
+  if (S.cfg && extrasKey(S.cfg.rules) !== lobbyExtrasKey) { lobbyExtrasKey = extrasKey(S.cfg.rules); lobbyExtras = drawExtras(lobbyMap, lobbyExtras, S.cfg.rules); }
   if (S.fix) {
-    if (!lobbyMe) lobbyMe = L.marker([S.fix.lat, S.fix.lng], { icon: L.divIcon({ className: 'pm', html: '<div class="me-dot"></div>', iconSize: [0, 0] }) }).addTo(lobbyMap);
+    if (!lobbyMe) lobbyMe = L.marker([S.fix.lat, S.fix.lng], { interactive: false, icon: L.divIcon({ className: 'pm', html: '<div class="me-dot"></div>', iconSize: [0, 0] }) }).addTo(lobbyMap);
     lobbyMe.setLatLng([S.fix.lat, S.fix.lng]);
   }
   if (!lobbyCentered && (z || S.fix)) {
@@ -1084,7 +1236,7 @@ function visiblePos(id) {
   if (p.kind === 'live') {
     if (roleOf(id) !== 'H') return null;
     const ended = !!outcome();
-    if (roleOf(S.me) === 'F' && !S.cfg.rules.fugitivesSeeHunters && !ended && !counterActive(S.me)) return null;
+    if (roleOf(S.me) === 'F' && !S.cfg.rules.fugitivesSeeHunters && !ended && !counterActive(S.me) && !riposteOn(id)) return null;
   }
   return p;
 }
@@ -1092,6 +1244,7 @@ function renderGameMap() {
   ensureGameMap();
   const z = S.cfg.rules.zone;
   updateGameZone();
+  if (extrasKey(S.cfg.rules) !== gameExtrasKey) { gameExtrasKey = extrasKey(S.cfg.rules); gameExtras = drawExtras(gameMap, gameExtras, S.cfg.rules); }
   updateSelfMarker();
 
   // Cercles des fugitifs (le mien aussi, pour savoir ce que voient les chasseurs)
@@ -1130,8 +1283,8 @@ function renderGameMap() {
     const role = p.kind === 'live' ? 'H' : 'F';
     const age = Date.now() - p.t;
     const old = p.kind === 'live' ? age > 90000 : false;
-    const label = esc(nameOf(id)) + (p.kind === 'live' ? '' : ' · ' + (age < 45000 ? 'maintenant' : ago(p.t).replace('il y a ', ''))) + (p.r ? ` · cercle n°${p.lvl || 1} ≈${fmtDist(p.r)}` : '');
-    const html = `${old ? '' : headingHtml(p.hdg, role)}<div class="pin ${role} ${old ? 'old' : ''} ${p.r ? 'fuzzy' : ''}">${esc(avatarOf(id) || nameOf(id).slice(0, 1).toUpperCase())}</div><div class="pin-label">${label}</div>`;
+    const label = esc(anonHidden(id) ? '❓ ' + (role === 'F' ? 'Fugitif' : 'Chasseur') : nameOf(id)) + (p.kind === 'live' ? '' : ' · ' + (age < 45000 ? 'maintenant' : ago(p.t).replace('il y a ', ''))) + (p.r ? ` · cercle n°${p.lvl || 1} ≈${fmtDist(p.r)}` : '');
+    const html = `${old ? '' : headingHtml(p.hdg, role)}<div class="pin ${role} ${old ? 'old' : ''} ${p.r ? 'fuzzy' : ''}">${anonHidden(id) ? '?' : esc(avatarOf(id) || nameOf(id).slice(0, 1).toUpperCase())}</div><div class="pin-label">${label}</div>`;
     const icon = L.divIcon({ className: 'pm', html, iconSize: [0, 0] });
     if (!markers[id]) markers[id] = L.marker([p.lat, p.lng], { icon }).addTo(gameMap);
     else { markers[id].setLatLng([p.lat, p.lng]); markers[id].setIcon(icon); }
@@ -1173,6 +1326,8 @@ function route() {
 }
 function render() {
   if (!S.cfg || !S.room) return;
+  const gq = gpsQuality();
+  for (const id of ['#gps-lobby', '#gps-game']) { const el = $(id); if (el.textContent !== gq.txt) el.textContent = gq.txt; el.className = 'gps ' + gq.cls; }
   for (const id of ['#conn-lobby', '#conn-game']) {
     $(id).classList.toggle('ok', S.connected);
     $(id).title = S.connected ? 'Connecté' : 'Reconnexion…';
@@ -1232,6 +1387,21 @@ function renderLobby() {
   if (document.activeElement !== rr) rr.value = z ? z.r : 1000;
   $('#zone-r-val').textContent = fmtDist(z ? z.r : +rr.value);
   $('#btn-zone-clear').hidden = !z;
+  const r0 = c.rules;
+  const extra = [r0.prison ? '🔒 Prison placée.' : '', (r0.nogo || []).length ? `⛔ ${r0.nogo.length} zone${r0.nogo.length > 1 ? 's' : ''} interdite${r0.nogo.length > 1 ? 's' : ''}.` : ''].filter(Boolean).join(' ');
+  if (extra) $('#zone-hint').textContent += ' ' + extra;
+  $('#map-mode').hidden = !host; $('#zone-extra').hidden = !host; $('#zone-saved-box').hidden = !host;
+  $('#map-mode-hint').hidden = !host;
+  $('#map-mode-hint').textContent = {
+    zone: 'Touche la carte pour placer le centre de la zone.',
+    prison: `Touche la carte pour placer la prison (cercle de ${PRISON_R} m). Un fugitif attrapé y va ; un fugitif libre qui y entre libère tout le monde.`,
+    nogo: 'Touche la carte pour ajouter une zone interdite ; touche-en une pour l’enlever. Y entrer révèle la position comme une sortie de zone.',
+  }[S.mapMode || 'zone'];
+  for (const b of document.querySelectorAll('#map-mode [data-mode]')) b.setAttribute('aria-checked', String(b.dataset.mode === (S.mapMode || 'zone')));
+  $('#nogo-r-box').hidden = (S.mapMode || 'zone') !== 'nogo';
+  $('#btn-prison-clear').hidden = !r0.prison;
+  $('#btn-nogo-clear').hidden = !(r0.nogo || []).length;
+  renderSavedZones();
   renderLobbyMap();
 
   // Lancement
@@ -1254,9 +1424,16 @@ function renderGame() {
   if (!out && c.status === 'running') {
     if (S.geoErr === 'denied') bannerText = '📍 Localisation refusée : autorise-la pour cette page, sinon personne ne te verra.';
     else if (S.geoErr) bannerText = '📍 Position introuvable pour l’instant…';
+    else if (outOfZone() === 'nogo') bannerText = role === 'F' ? '⛔ Zone interdite ! Sors-en, ta position est révélée.' : '⛔ Tu es dans une zone interdite !';
     else if (outOfZone()) bannerText = role === 'F' ? '🚧 Tu es hors zone ! Ta position est révélée.' : '🚧 Tu es hors zone !';
+    else if (baseRole(S.me) === 'F' && isCaught(S.me) && c.rules.prison) {
+      const d = S.fix ? dist(S.fix, c.rules.prison) : null;
+      bannerText = d != null && d <= c.rules.prison.r + 15 ? '🔒 Tu es en prison. Attends qu’un fugitif vienne te libérer.' : `🔒 Va à la prison${d != null ? ` (à ${fmtDist(d)})` : ''} et attends qu’on te libère.`;
+      bannerInfo = true;
+    }
     else if (!S.connected) { bannerText = 'Connexion perdue, reconnexion…'; bannerInfo = true; }
     else if (role === 'F' && counterActive(S.me)) { bannerText = `🔍 Contre-radar : tu vois les chasseurs encore ${Math.ceil(counterLeft(S.me) / 1000)} s`; bannerInfo = true; }
+    else if (role === 'F' && riposteLeft().left > 0) { const rl = riposteLeft(); bannerText = `↩️ Riposte : tu vois ${dn(rl.target)} encore ${Math.ceil(rl.left / 1000)} s`; bannerInfo = true; }
   }
   banner.hidden = !bannerText; banner.textContent = bannerText; banner.classList.toggle('info', bannerInfo);
   if (bannerText) banner.style.top = ($('#hud').getBoundingClientRect().bottom + 8) + 'px';
@@ -1269,6 +1446,7 @@ function renderGame() {
       const jl = c.rules.jams - powersUsed(S.me, 'jam'), cl = c.rules.counters - powersUsed(S.me, 'counter');
       if (c.rules.jams > 0) acts += `<button class="btn" data-act="jam" ${jl > 0 && hunting && ph.nextReveal ? '' : 'disabled'}>🌫️ Brouillage (${jl})</button>`;
       if (c.rules.counters > 0) acts += `<button class="btn" data-act="counter" ${cl > 0 && hunting && !counterActive(S.me) ? '' : 'disabled'}>🔍 Contre-radar (${cl})</button>`;
+      if (riposteAvailable()) acts = `<button class="btn primary" data-act="riposte">↩️ Riposte : voir qui t'a radaré</button>` + acts;
       acts += '<button class="btn fug" data-act="caught-self">Je me suis fait attraper</button>';
     }
     else if (role === 'H') {
@@ -1287,7 +1465,7 @@ function renderGame() {
   ids.sort((a, b) => 'FHS'.indexOf(roleOf(a)) - 'FHS'.indexOf(roleOf(b)));
   $('#game-players').innerHTML = ids.map((id) => {
     const r = roleOf(id), base = baseRole(id), caught = base === 'F' && isCaught(id);
-    const p = visiblePos(id);
+    const p = anonHidden(id) ? null : visiblePos(id);
     const meta = [];
     if (caught) {
       const k = S.caught[id];
@@ -1307,10 +1485,11 @@ function renderGame() {
       meta.push(mp && mp.gameId === c.gameId && mp.kind !== 'live'
         ? `dernière révélation ${ago(mp.t)}${mp.r ? ` · cercle n°${mp.lvl || 1} (${fmtDist(mp.r)})` : ''}`
         : 'pas encore révélé·e');
-    } else if (base === 'F' && !caught && id !== S.me) meta.push('position cachée');
+    } else if (base === 'F' && !caught && id !== S.me) meta.push(anonHidden(id) ? 'mode anonyme' : 'position cachée');
+    if (caught && S.cfg.rules.prison) meta.push('🔒 en prison');
     if (id === S.me && S.fix && mySpeed() >= 0.5) meta.push(kmh(mySpeed()));
     if (!S.online[id]) meta.push('hors ligne');
-    const chip = caught && r !== 'H' ? 'Attrapé·e' : ROLE_LABEL[r];
+    const chip = caught && r !== 'H' ? (c.rules.prison ? '🔒 Prison' : 'Attrapé·e') : ROLE_LABEL[r];
     return `<li class="player ${caught ? 'caught' : ''} ${p ? 'clickable' : ''}" ${p ? `data-focus="${esc(id)}"` : ''}>
       <span class="dot ${S.online[id] ? 'on' : ''}"></span>
       <div class="who"><div class="pname">${esc(avatarOf(id))} ${esc(nameOf(id))}${id === S.me ? ' (toi)' : ''} ${battHtml(id)}</div><div class="pmeta">${meta.join(' · ') || '&nbsp;'}</div></div>
@@ -1344,7 +1523,7 @@ function renderGame() {
 function renderHud(ph, out, role, now) {
   const caught = baseRole(S.me) === 'F' && isCaught(S.me);
   const badge = $('#hud-role');
-  badge.textContent = caught && role !== 'H' ? 'Attrapé·e' : ROLE_LABEL[role];
+  badge.textContent = caught && role !== 'H' ? (S.cfg.rules.prison ? '🔒 En prison' : 'Attrapé·e') : ROLE_LABEL[role];
   badge.className = 'badge role-' + (caught && role !== 'H' ? 'S' : role);
   const count = $('#hud-count');
   let phaseText = '', countText = '', sub = '', hot = false;
@@ -1524,6 +1703,46 @@ $('#zone-r').addEventListener('change', () => {
   if (z) pubRules({ zone: { ...z, r: +$('#zone-r').value } });
 });
 $('#btn-zone-clear').onclick = () => pubRules({ zone: null });
+$('#map-mode').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-mode]');
+  if (!b) return;
+  S.mapMode = b.dataset.mode; scheduleRender();
+});
+$('#btn-prison-clear').onclick = () => pubRules({ prison: null });
+$('#btn-nogo-clear').onclick = () => pubRules({ nogo: [] });
+
+/* Zones enregistrées : partagées avec le groupe (dans la partie) et gardées sur ce téléphone. */
+function savedZones() {
+  const all = [...((S.cfg && S.cfg.savedZones) || []), ...(store.get('traque.zones') || [])];
+  const seen = new Set();
+  return all.filter((z) => z && z.name && !seen.has(z.name) && seen.add(z.name));
+}
+function renderSavedZones() {
+  const sel = $('#zone-saved'), list = savedZones();
+  const html = '<option value="">📂 Zones enregistrées…</option>' + list.map((z, i) => `<option value="${i}">${esc(z.name)}</option>`).join('');
+  if (sel.dataset.html !== html) { sel.dataset.html = html; sel.innerHTML = html; }
+  sel.disabled = !list.length;
+}
+$('#zone-saved').addEventListener('change', (e) => {
+  const z = savedZones()[+e.target.value];
+  e.target.value = '';
+  if (!z || !isHost()) return;
+  lobbyCentered = false;
+  pubRules({ zone: z.zone, prison: z.prison || null, nogo: z.nogo || [] });
+  toast(`📂 Zone « ${z.name} » chargée`);
+});
+$('#btn-zone-save').onclick = () => {
+  const r = S.cfg.rules;
+  if (!r.zone) { toast('Place d’abord une zone.'); return; }
+  const name = (prompt('Nom de cette zone (ex. « Parc de la Hotoie ») :') || '').trim().slice(0, 40);
+  if (!name) return;
+  const entry = { name, zone: r.zone, prison: r.prison || null, nogo: r.nogo || [] };
+  const local = (store.get('traque.zones') || []).filter((z) => z.name !== name);
+  store.set('traque.zones', [entry, ...local].slice(0, 20));
+  const shared = ((S.cfg.savedZones) || []).filter((z) => z.name !== name);
+  pubCfg({ savedZones: [entry, ...shared].slice(0, 10) });
+  toast(`💾 Zone « ${name} » enregistrée pour le groupe`);
+};
 $('#btn-start').onclick = startGame;
 $('#btn-become-host').onclick = async () => {
   if (await confirmBox('Devenir organisateur ?', `${nameOf(S.cfg.host)} ne pourra plus changer les réglages.`, 'Oui')) pubCfg({ host: S.me });
@@ -1538,6 +1757,8 @@ document.addEventListener('click', async (e) => {
     else if (act === 'ping') usePing();
     else if (act === 'jam') usePower('jam');
     else if (act === 'counter') usePower('counter');
+    else if (act === 'riposte') useRiposte();
+    else if (act === 'gps') openGpsHelp();
     else if (act === 'reminders') openReminders();
     else if (act === 'see-map') { S.endDismissed = true; scheduleRender(); }
     else if (act === 'lobby') pubCfg({ status: 'lobby' });
