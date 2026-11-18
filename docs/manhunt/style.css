@@ -352,3 +352,8 @@ body.replay .leaflet-overlay-pane path:not(.rp):not(.zp) { display: none; }
 /* Indicateur de connexion : partiel = orange */
 .conn.part { background: var(--warn); }
 .conn:not(.ok):not(.part) { background: var(--fug); }
+
+/* Fond « Sombre » : plan inversé en couleurs */
+.leaflet-layer.tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88) saturate(.55); }
+.leaflet-container { background: #e9e5dc; }
+body.map-dark .leaflet-container { background: #1f2227; }
