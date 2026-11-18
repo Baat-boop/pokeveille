@@ -20,7 +20,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="vendor/leaflet.css">
-  <link rel="stylesheet" href="style.css?v=2026-11-18f">
+  <link rel="stylesheet" href="style.css?v=2026-11-18g">
 </head>
 <body>
 
@@ -152,6 +152,7 @@
         </label>
         <label class="check"><input type="checkbox" data-rule="caughtBecomesHunter"> Un fugitif attrapé devient chasseur</label>
         <label class="check"><input type="checkbox" data-rule="fugitivesSeeHunters"> Les fugitifs voient les chasseurs en direct</label>
+        <label class="check"><input type="checkbox" data-rule="testMode"> 🧪 Mode test : tout le monde voit tout (positions exactes, onglet de diagnostic), pas de points</label>
         <label class="check"><input type="checkbox" data-rule="anon"> Mode anonyme : les chasseurs voient des positions sans savoir quel fugitif est où</label>
 
         <h3 class="rules-sub">Fugitifs</h3>
@@ -311,9 +312,11 @@
     <div class="tabs" role="tablist">
       <button role="tab" data-tab="players" aria-selected="true">Joueurs</button>
       <button role="tab" data-tab="log">Journal <span class="pill" id="log-unread" hidden></span></button>
+      <button role="tab" data-tab="test" id="tab-test-btn" hidden>🛠️ Test</button>
       <button class="tab-toggle" id="btn-sheet" aria-label="Agrandir ou réduire">▴</button>
     </div>
     <div class="tab-body" id="tab-players"><ul class="players" id="game-players"></ul><div id="host-tools" class="host-tools"></div></div>
+    <div class="tab-body test-body" id="tab-test" hidden></div>
     <div class="tab-body" id="tab-log" hidden>
       <ul class="log" id="log"></ul>
       <form class="chat" id="chat">
@@ -358,6 +361,6 @@
 <script src="vendor/mqtt.min.js"></script>
 <script src="vendor/leaflet.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script type="module" src="app.js?v=2026-11-18f"></script>
+<script type="module" src="app.js?v=2026-11-18g"></script>
 </body>
 </html>

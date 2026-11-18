@@ -11,9 +11,15 @@
 /* global mqtt, L, qrcode */
 
 const qs = new URLSearchParams(location.search);
-const BROKERS = qs.get('broker')
-  ? qs.get('broker').split(',')
-  : ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
+const BROKERS = qs.get('broker') === 'none' ? []
+  : qs.get('broker') ? qs.get('broker').split(',')
+    : ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
+// Notre relais sur Cloudflare (?relay=none pour le couper, ?relay=ws://… pour en tester un autre).
+const OUR_HOST = 'traque.jeu-traque.workers.dev';
+const OUR_RELAY = qs.get('relay') === 'none' || (qs.get('broker') && !qs.get('relay')) ? null
+  : qs.get('relay') || `wss://${location.hostname === OUR_HOST ? location.host : OUR_HOST}/relay/`;
+const RELAYS = [...(OUR_RELAY ? ['relay:' + OUR_RELAY] : []), ...BROKERS];
+const relayName = (u) => (u === 'local' ? 'Robots (local)' : u.startsWith('relay:') ? 'Cloudflare (le nôtre)' : u.replace(/^wss?:\/\//, '').split(/[:/]/)[0]);
 // ?fast=1 : une « minute » dure une seconde (tests uniquement).
 const MIN = qs.get('fast') ? 1000 : 60000;
 const NS = 'traque/v1/';
@@ -40,6 +46,7 @@ const DEFAULT_RULES = {
   missions: [],     // balises [{lat, lng}] : +1 pouvoir pour le fugitif qui y passe
   bonusEvery: 0,    // un pouvoir offert aux fugitifs toutes les N minutes de survie (0 = non)
   teams: 0,         // nombre d'équipes de fugitifs (0 = pas d'équipes)
+  testMode: false,  // mode test : tout le monde voit tout, panneau de diagnostic, pas de points
 };
 const MODE_HINT = {
   classic: 'Classique : les chasseurs doivent attraper tous les fugitifs avant la fin du temps.',
@@ -150,7 +157,7 @@ const S = {
   fix: null, geoErr: null, geoWatch: null, wake: null,
   lastLive: 0, lastOutzone: 0, wasOut: false, warnedReveal: 0, finalSent: false,
   tab: 'players', endDismissed: false, lastOutcomeKey: null,
-  clients: [], playerT: {}, mates: {}, tlRaw: {}, teamKey: null, ecdh: null, onlineBy: {}, tracks: {}, balises: {}, flag: null, solo: false,
+  clients: [], relayUrls: [], relayStats: [], kindStats: {}, dbg: {}, playerT: {}, mates: {}, tlRaw: {}, teamKey: null, ecdh: null, onlineBy: {}, tracks: {}, balises: {}, flag: null, solo: false,
   batt: {}, hist: {}, powers: {}, emoji: '', bat: null, charging: false, swReg: null, fullmap: false,
 };
 const T = (sub) => NS + S.room.id + '/' + sub;
@@ -218,8 +225,51 @@ document.addEventListener('pointerdown', () => { try { audioCtx = audioCtx || ne
  * Chaque téléphone se connecte à TOUS les relais en même temps et publie sur chacun.
  * Si un relais tombe en pleine partie, les autres prennent le relais sans que personne ne s'en rende compte.
  * Les messages reçus en double (un par relais) ou en retard sont triés grâce à leur horodatage. */
+/** Client de notre relais Cloudflare (WebSocket), avec la même interface que les clients MQTT. */
+function relayClient(base, will) {
+  const h = {}, prefix = NS + S.room.id + '/';
+  let ws = null, closed = false, retry = 0, pingT = null;
+  const c = {
+    connected: false,
+    on(ev, fn) { (h[ev] || (h[ev] = [])).push(fn); return c; },
+    once(ev, fn) { const w = (...a) => { h[ev] = h[ev].filter((x) => x !== w); fn(...a); }; return c.on(ev, w); },
+    emit(ev, ...a) { (h[ev] || []).slice().forEach((f) => f(...a)); },
+    subscribe(_t, _o, cb) { if (cb) cb(null); },
+    publish(topic, payload, o = {}) {
+      if (!ws || ws.readyState !== 1 || !topic.startsWith(prefix)) return;
+      ws.send(JSON.stringify({ t: 'pub', topic: topic.slice(prefix.length), payload: String(payload), retain: !!o.retain }));
+    },
+    end() { closed = true; clearInterval(pingT); c.connected = false; try { ws.close(1000); } catch { /* déjà fermé */ } },
+  };
+  const open = () => {
+    try { ws = new WebSocket(base + S.room.id); } catch { return; }
+    ws.onopen = () => {
+      retry = 0; c.connected = true;
+      if (will) ws.send(JSON.stringify({ t: 'will', topic: will.topic.slice(prefix.length), payload: String(will.payload) }));
+      clearInterval(pingT); pingT = setInterval(() => { try { ws.send('ping'); } catch { /* fermé */ } }, 25000);
+      c.emit('connect');
+    };
+    ws.onmessage = (e) => {
+      if (e.data === 'pong') return;
+      let m;
+      try { m = JSON.parse(e.data); } catch { return; }
+      if (m.t === 'retained') for (const [t, pl] of m.m) c.emit('message', prefix + t, pl);
+      else if (m.t === 'msg') c.emit('message', prefix + m.topic, m.payload);
+    };
+    ws.onclose = () => {
+      clearInterval(pingT);
+      const was = c.connected; c.connected = false;
+      if (was) c.emit('close');
+      if (!closed) setTimeout(open, Math.min(15000, 1000 * 2 ** retry++));
+    };
+    ws.onerror = () => {};
+  };
+  open();
+  return c;
+}
 function mkClient(url, will) {
   if (url === 'local') return localBroker.client();
+  if (url.startsWith('relay:')) return relayClient(url.slice(6), will);
   return mqtt.connect(url, {
     clientId: 'tq_' + randStr(12), clean: true, keepalive: 30, reconnectPeriod: 3000,
     connectTimeout: 8000, protocolVersion: 4, will, queueQoSZero: false,
@@ -281,11 +331,13 @@ syncClock();
 
 let msgQueue = Promise.resolve();
 function onMessage(topic, payload, relay = 0) {
+  if (S.relayStats) S.relayStats[relay] = (S.relayStats[relay] || 0) + 1;
   msgQueue = msgQueue.then(async () => {
     if (!S.room) return;
     const prefix = NS + S.room.id + '/';
     if (!topic.startsWith(prefix)) return;
     const [kind, id] = topic.slice(prefix.length).split('/');
+    S.kindStats[kind] = (S.kindStats[kind] || 0) + 1;
     let data = null;
     if (payload && payload.length) {
       try { data = await unseal(S.room.key, payload.toString()); } catch { return; }
@@ -326,6 +378,7 @@ function onMessage(topic, payload, relay = 0) {
         if (data && data.cleared) onUncaught(id); else if (data) onCaught(id, data);
         break;
       case 'trk': if (data && !older(S.tracks[id], data)) S.tracks[id] = data; break;
+      case 'dbg': if (data && !older(S.dbg[id], data)) S.dbg[id] = data; break;
       case 'tk': if (data && id === S.me) await onTeamKey(data); break;
       case 'tl': if (data && id !== S.me) { S.tlRaw[id] = data; await decodeMates(); } break;
       case 'bal': if (data && !older(S.balises[id], data)) onBalise(+id, data); break;
@@ -359,7 +412,8 @@ async function enterRoom({ code, create = false, solo = null }) {
 
     const will = { topic: T('on/' + S.me), payload: await seal(S.room.key, { on: false }), qos: 1, retain: true };
     if (solo) localBroker = new LocalBroker();
-    const urls = solo ? ['local'] : BROKERS;
+    const urls = solo ? ['local'] : RELAYS;
+    S.relayUrls = urls; S.relayStats = urls.map(() => 0);
     S.clients = urls.map((u) => mkClient(u, will));
     S.clients.forEach((c, i) => {
       c.on('message', (t, pl) => onMessage(t, pl, i));
@@ -1259,6 +1313,79 @@ function mateLive(id) {
   return m && m.gameId === c.gameId ? { ...m, kind: 'mate' } : null;
 }
 
+/* ---------- mode test ----------
+ * Tout le monde voit la position exacte de tout le monde, et un onglet « Test » montre l'état de chaque téléphone
+ * (relais, GPS, batterie, horloge, version). Les points du classement ne sont pas comptés. */
+const testOn = () => !!(S.cfg && S.cfg.rules.testMode);
+async function publishDebug() {
+  const now = tnow();
+  if (now - (S.lastDbg || 0) < 3000) return;
+  S.lastDbg = now;
+  const ua = navigator.userAgent, os = /iPhone|iPad/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'Mac' : 'Autre';
+  await pub('dbg/' + S.me, {
+    t: now, lat: S.fix ? +S.fix.lat.toFixed(6) : null, lng: S.fix ? +S.fix.lng.toFixed(6) : null, acc: S.fix ? S.fix.acc : null,
+    spd: mySpeed(), hdg: myHeading(), bat: S.bat, chg: S.charging, role: roleOf(S.me), ver: APP_VERSION,
+    relays: S.clients.map((c) => (c.connected ? 1 : 0)), off: CLOCK_OFF, geo: S.geoErr || null,
+    vis: document.visibilityState, wake: !!S.wake, os,
+  }, { retain: true });
+}
+function dbgPos(id) {
+  const d = S.dbg[id];
+  if (!testOn() || id === S.me || !d || d.lat == null || tnow() - d.t > 60000) return null;
+  return { lat: d.lat, lng: d.lng, hdg: d.hdg, spd: d.spd, acc: d.acc, t: d.t, kind: roleOf(id) === 'H' ? 'live' : 'test', gameId: S.cfg.gameId };
+}
+function renderTest() {
+  const el = $('#tab-test');
+  if (!testOn() || S.tab !== 'test') return;
+  const c = S.cfg, now = tnow(), dot = (on) => (on ? '🟢' : '⚪');
+  const relays = S.relayUrls.map((u, i) => `<li>${dot(S.clients[i] && S.clients[i].connected)} ${esc(relayName(u))} · ${S.relayStats[i] || 0} messages reçus</li>`).join('');
+  const kinds = Object.entries(S.kindStats).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${esc(k)} : ${n}`).join(' · ');
+  const rows = sortedPlayers().map((id) => {
+    const d = id === S.me ? { acc: S.fix && S.fix.acc, spd: mySpeed(), bat: S.bat, chg: S.charging, ver: APP_VERSION, relays: S.clients.map((x) => (x.connected ? 1 : 0)), off: CLOCK_OFF, t: now, geo: S.geoErr, os: '' } : S.dbg[id];
+    if (!d) return `<tr><td>${esc(avatarOf(id))} ${esc(nameOf(id))}</td><td colspan="6" class="muted">pas d'infos (mode test activé après son arrivée ?)</td></tr>`;
+    const old = now - d.t > 15000;
+    return `<tr class="${old ? 'stale' : ''}">
+      <td>${esc(avatarOf(id))} ${esc(nameOf(id))}${id === S.me ? ' (toi)' : ''}<div class="muted">${ROLE_LABEL[roleOf(id)] || ''}${d.os ? ' · ' + esc(d.os) : ''}</div></td>
+      <td>${d.geo ? '❌ ' + esc(d.geo) : d.acc != null ? '±' + d.acc + ' m' : '…'}</td>
+      <td>${d.spd >= 0.5 ? kmh(d.spd) : '—'}</td>
+      <td>${d.bat != null ? (d.chg ? '⚡' : '') + d.bat + ' %' : '—'}</td>
+      <td>${(d.relays || []).map((x) => (x ? '●' : '○')).join('')}</td>
+      <td class="${d.ver !== APP_VERSION ? 'warn' : ''}">${esc((d.ver || '?').slice(5))}</td>
+      <td>${old ? ago(d.t).replace('il y a ', '') : 'ok'}${d.off ? `<div class="muted">horloge ${d.off > 0 ? '+' : ''}${(d.off / 1000).toFixed(1)} s</div>` : ''}</td>
+    </tr>`;
+  }).join('');
+  const host = isHost() && c.status === 'running' && !outcome();
+  const html = `
+    ${host ? `<div class="test-ctrl"><button class="btn small" data-test="skip1">⏩ +1 min</button><button class="btn small" data-test="skip5">⏩ +5 min</button><button class="btn small" data-test="reveal">📍 Révélation tout de suite</button></div>` : ''}
+    <h4>Ce téléphone</h4>
+    <ul class="test-list">
+      <li>Version ${esc(APP_VERSION)} · horloge corrigée de ${(CLOCK_OFF / 1000).toFixed(1)} s · écran ${S.wake ? 'maintenu allumé' : 'normal'}</li>
+      <li>GPS : ${S.geoErr ? '❌ ' + esc(S.geoErr) : S.fix ? `±${S.fix.acc} m, mis à jour ${ago(S.fix.t)}` : 'en attente…'}</li>
+      ${relays}
+      <li class="muted">Messages par type : ${kinds || '—'}</li>
+    </ul>
+    <h4>Joueurs</h4>
+    <div class="test-table"><table><thead><tr><th>Joueur</th><th>GPS</th><th>Vitesse</th><th>Batt.</th><th>Relais</th><th>Version</th><th>Vu</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <details><summary>Configuration de la partie (brute)</summary><pre>${esc(JSON.stringify(c, null, 1))}</pre></details>`;
+  if (el.dataset.html !== html) { el.dataset.html = html; el.innerHTML = html; }
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-test]');
+  if (!b || !isHost() || !S.cfg || S.cfg.status !== 'running') return;
+  const c = S.cfg, ph = phase();
+  if (b.dataset.test === 'skip1' || b.dataset.test === 'skip5') {
+    const m = b.dataset.test === 'skip1' ? 1 : 5;
+    await pubCfg({ startAt: c.startAt - m * MIN });
+    toast(`⏩ La partie avance de ${m} min`);
+  } else if (b.dataset.test === 'reveal') {
+    // Décale le temps juste avant la prochaine révélation.
+    const target = ph.name === 'head' ? ph.release : ph.nextReveal;
+    if (!target) { toast('Plus de révélation prévue.'); return; }
+    await pubCfg({ startAt: c.startAt - (target - tnow()) - 500 });
+    toast('📍 Révélation déclenchée');
+  }
+});
+
 /* ---------- balises et drapeau ---------- */
 function onBalise(i, data) {
   S.balises[i] = data;
@@ -1283,7 +1410,7 @@ function onFlag(data) {
 /* ---------- classement de la soirée ---------- */
 function scoreUpdate(out) {
   const c = S.cfg;
-  if (c.scoredGame === c.gameId) return {};
+  if (c.scoredGame === c.gameId || c.rules.testMode) return {};
   const scores = { ...(c.scores || {}) };
   const add = (id, n) => { if (n) scores[id] = (scores[id] || 0) + n; };
   const release = c.startAt + c.rules.headStart * MIN, end = out.at || tnow();
@@ -1731,15 +1858,15 @@ function renderGameMap() {
   const seen = new Set();
   for (const id of Object.keys(S.players)) {
     const mate = mateLive(id);
-    const p = mate || visiblePos(id);
+    const p = mate || dbgPos(id) || visiblePos(id);
     if (!p) continue;
     seen.add(id);
-    const role = p.kind === 'live' ? 'H' : 'F';
+    const role = p.kind === 'live' ? 'H' : p.kind === 'test' && roleOf(id) === 'S' ? 'S' : 'F';
     const age = tnow() - p.t;
     const old = p.kind === 'live' || mate ? age > 90000 : false;
     const tm = !anonHidden(id) ? teamOf(id) : null;
     const label = esc(anonHidden(id) ? '❓ ' + (role === 'F' ? 'Fugitif' : 'Chasseur') : nameOf(id))
-      + (mate ? ' · équipier' : p.kind === 'live' ? '' : ' · ' + (age < 45000 ? 'maintenant' : ago(p.t).replace('il y a ', '')))
+      + (p.kind === 'test' ? ` · 🧪 ±${p.acc} m` : mate ? ' · équipier' : p.kind === 'live' ? '' : ' · ' + (age < 45000 ? 'maintenant' : ago(p.t).replace('il y a ', '')))
       + (p.r && !mate ? ` · cercle n°${p.lvl || 1} ≈${fmtDist(p.r)}` : '');
     const html = `${old ? '' : headingHtml(p.hdg, role)}<div class="pin ${role} ${old ? 'old' : ''} ${p.r && !mate ? 'fuzzy' : ''} ${tm != null ? 'teamed' : ''}" ${tm != null ? `style="--team:${TEAMS[tm].c}"` : ''}>${anonHidden(id) ? '?' : esc(avatarOf(id) || nameOf(id).slice(0, 1).toUpperCase())}</div><div class="pin-label">${label}</div>`;
     const icon = L.divIcon({ className: 'pm', html, iconSize: [0, 0] });
@@ -1992,6 +2119,9 @@ function renderGame() {
   const unread = S.log.length - S.logSeen;
   $('#log-unread').hidden = unread <= 0; $('#log-unread').textContent = unread;
 
+  $('#tab-test-btn').hidden = !testOn();
+  if (!testOn() && S.tab === 'test') $('[data-tab=players]').click();
+  renderTest();
   renderGameMap();
   renderEnd(out);
 }
@@ -1999,7 +2129,7 @@ function renderGame() {
 function renderHud(ph, out, role, now) {
   const caught = baseRole(S.me) === 'F' && isCaught(S.me);
   const badge = $('#hud-role');
-  badge.textContent = caught && role !== 'H' ? (S.cfg.rules.prison ? '🔒 En prison' : 'Attrapé·e') : ROLE_LABEL[role];
+  badge.textContent = (testOn() ? '🧪 ' : '') + (caught && role !== 'H' ? (S.cfg.rules.prison ? '🔒 En prison' : 'Attrapé·e') : ROLE_LABEL[role]);
   badge.className = 'badge role-' + (caught && role !== 'H' ? 'S' : role);
   const count = $('#hud-count');
   let phaseText = '', countText = '', sub = '', hot = false;
@@ -2311,6 +2441,7 @@ for (const tab of document.querySelectorAll('.tabs [role=tab]')) {
     for (const t of document.querySelectorAll('.tabs [role=tab]')) t.setAttribute('aria-selected', String(t === tab));
     $('#tab-players').hidden = S.tab !== 'players';
     $('#tab-log').hidden = S.tab !== 'log';
+    $('#tab-test').hidden = S.tab !== 'test';
     scheduleRender();
   };
 }
@@ -2590,6 +2721,7 @@ let ticks = 0;
 setInterval(() => {
   if (!S.room || !S.cfg) return;
   ticks++;
+  if (testOn()) publishDebug();
   if (S.screen === 'game') {
     dutyTick();
     renderHud(phase(), outcome(), roleOf(S.me), tnow());
@@ -2602,7 +2734,7 @@ setInterval(() => {
  * GitHub Pages laisse les navigateurs garder les fichiers jusqu'à 10 min. Au démarrage (et au retour sur la page),
  * on compare la version chargée à celle du site ; si elle est plus récente, on recharge sans cache.
  * À chaque modification de l'appli : changer APP_VERSION, version.txt et les ?v= de index.html. */
-const APP_VERSION = '2026-11-18f';
+const APP_VERSION = '2026-11-18g';
 async function checkUpdate() {
   try {
     if (S.screen === 'game' && S.cfg && S.cfg.status === 'running') return; // jamais en pleine partie
@@ -2620,7 +2752,7 @@ checkUpdate();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
 
 // Démarrage
-if (qs.get('fast')) window.__traque = { S, zoneState, pubRules, pubCfg, outcome, powersLeft, connCount, teamOf, mateLive };
+if (qs.get('fast')) window.__traque = { RELAYS, S, zoneState, pubRules, pubCfg, outcome, powersLeft, connCount, teamOf, mateLive };
 initHome();
 const h0 = parseHash();
 if (h0.code) $(store.get('traque.name') ? '#btn-join' : '#name').focus();

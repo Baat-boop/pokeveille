@@ -365,3 +365,16 @@ body.map-dark .leaflet-container { background: #1f2227; }
 .team-badge { display: inline-block; font-size: .72rem; font-weight: 700; padding: 0 .4rem; border-radius: 6px; border: 1.5px solid var(--team); color: var(--text); }
 .team-row { border-left: 4px solid var(--team); padding-left: .6rem !important; font-weight: 600; }
 .role-chip.compact { padding: .35rem .5rem; min-width: 38px; }
+
+/* Mode test */
+.test-body h4 { margin: .8rem 0 .3rem; font-size: .9rem; }
+.test-list { list-style: none; padding: 0; margin: 0; font-size: .85rem; }
+.test-list li { padding: .2rem 0; }
+.test-ctrl { display: flex; gap: .4rem; flex-wrap: wrap; padding-top: .4rem; }
+.test-table { overflow-x: auto; }
+.test-table table { border-collapse: collapse; width: 100%; font-size: .8rem; }
+.test-table th, .test-table td { text-align: left; padding: .35rem .4rem; border-top: 1px solid var(--line); vertical-align: top; white-space: nowrap; }
+.test-table th { color: var(--muted); font-weight: 600; }
+.test-table tr.stale td { opacity: .55; }
+.test-table td.warn { color: var(--fug); font-weight: 700; }
+.test-body pre { font-size: .7rem; max-height: 240px; overflow: auto; background: var(--surface-2); padding: .5rem; border-radius: 8px; }
