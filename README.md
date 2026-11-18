@@ -72,7 +72,7 @@ node tools/serve.mjs          # aperçu sur http://localhost:8080/docs/?local
 
 ## Bonus : Traque (Manhunt entre potes)
 
-Jeu de chasse à l'homme grandeur nature, dans `docs/manhunt/`, publié sur Cloudflare : https://traque.batandtab-e25.workers.dev/
+Jeu de chasse à l'homme grandeur nature, dans `docs/manhunt/`, publié sur Cloudflare : https://traque.jeu-traque.workers.dev/
 
 Publication : `CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_EMAIL=… CLOUDFLARE_API_KEY=… node tools/deploy-cloudflare.mjs` (le jeu est emballé dans un Worker Cloudflare). Penser à changer le numéro de version (`version.txt`, `APP_VERSION` dans `app.js`, `?v=` dans `index.html`) pour que les téléphones se mettent à jour.
 
