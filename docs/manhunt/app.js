@@ -2414,6 +2414,27 @@ setInterval(() => {
   }
 }, 1000);
 
+/* ---------- mise à jour automatique ----------
+ * GitHub Pages laisse les navigateurs garder les fichiers jusqu'à 10 min. Au démarrage (et au retour sur la page),
+ * on compare la version chargée à celle du site ; si elle est plus récente, on recharge sans cache.
+ * À chaque modification de l'appli : changer APP_VERSION, version.txt et les ?v= de index.html. */
+const APP_VERSION = '2026-11-18c';
+async function checkUpdate() {
+  try {
+    if (S.screen === 'game' && S.cfg && S.cfg.status === 'running') return; // jamais en pleine partie
+    const res = await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const v = (await res.text()).trim();
+    if (v && v !== APP_VERSION && store.get('traque.reloadedFor') !== v) {
+      store.set('traque.reloadedFor', v);
+      const q = new URLSearchParams(location.search); q.set('v', v);
+      location.replace(location.pathname + '?' + q + location.hash);
+    }
+  } catch { /* hors ligne : on garde la version chargée */ }
+}
+checkUpdate();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
+
 // Démarrage
 if (qs.get('fast')) window.__traque = { S, zoneState, pubRules, pubCfg, outcome, powersLeft, connCount };
 initHome();
