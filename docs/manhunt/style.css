@@ -227,9 +227,7 @@ input:focus-visible, select:focus-visible, .btn:focus-visible { outline: 2px sol
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 .leaflet-container { font: inherit; }
-@media (prefers-color-scheme: dark) {
-  .leaflet-tile-pane { filter: brightness(.75) contrast(1.1) saturate(.8); }
-}
+
 @media (max-width: 380px) {
   .rules-form { grid-template-columns: 1fr; }
   .hud-count { font-size: 2rem; }
@@ -254,3 +252,51 @@ input:focus-visible, select:focus-visible, .btn:focus-visible { outline: 2px sol
 .hud-zone.hot { color: var(--fug); }
 .pin.fuzzy { border-style: dashed; }
 .rules-form .rules-note { grid-column: 1 / -1; margin: 0; }
+
+/* Icône perso */
+.emoji-pick { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 6px; scrollbar-width: none; }
+.emoji-pick::-webkit-scrollbar { display: none; }
+.emoji-pick button { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px; border: 2px solid var(--line); background: var(--surface); font-size: 1.4rem; cursor: pointer; }
+.emoji-pick button[aria-checked=true] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, var(--surface)); }
+.pin { font-size: 1rem; }
+.me-emoji { position: absolute; left: 8px; top: -26px; font-size: 1.1rem; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+
+/* Règles en rubriques */
+.rules-sub { grid-column: 1 / -1; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: .6rem 0 -.2rem; padding-top: .6rem; border-top: 1px solid var(--line); }
+.rules-sub:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+
+/* Batterie */
+.batt { font-size: .75rem; font-weight: 600; color: var(--muted); margin-left: .2rem; white-space: nowrap; }
+.batt.low { color: var(--fug); }
+
+/* Crédits de carte repliés en un petit bouton ⓘ */
+.leaflet-control.map-info { display: flex; align-items: center; gap: 4px; margin: 0 6px 6px 0; }
+.map-info button { width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(255,255,255,.85); color: #333; font-size: .85rem; line-height: 1; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.map-info-text { display: none; background: rgba(255,255,255,.92); color: #333; font-size: .7rem; padding: 2px 6px; border-radius: 6px; }
+.map-info-text a { color: #1c5fa8; }
+.map-info.open .map-info-text { display: inline; }
+.leaflet-control-scale-line { background: rgba(255,255,255,.75); border-color: #555; font-size: .65rem; }
+body.map-dark .leaflet-control-scale-line { background: rgba(20,20,26,.7); color: #eee; border-color: #ccc; }
+
+/* Plein écran */
+.sheet { transition: max-height .2s ease, transform .25s ease; }
+.hud, .fabs { transition: bottom .25s ease; }
+body.fullmap .sheet { transform: translateY(110%); pointer-events: none; }
+body.fullmap .hud { max-width: 240px; padding: 6px 12px 8px; }
+body.fullmap .hud-row, body.fullmap .hud-phase, body.fullmap .hud-sub { display: none; }
+body.fullmap .hud-count { font-size: 1.7rem; }
+body.fullmap .hud-zone { font-size: .75rem; margin-top: 0; }
+
+/* Rappels */
+.steps { padding-left: 1.2rem; margin: .5rem 0; }
+.steps li { margin-bottom: .5rem; }
+code.topic { display: inline-block; background: var(--surface-2); padding: .2rem .45rem; border-radius: 6px; font-size: .9rem; user-select: all; margin: .3rem .3rem 0 0; }
+.rem-toggle { display: flex; align-items: center; gap: .6rem; font-weight: 600; margin: .6rem 0; }
+.rem-toggle input { width: 22px; height: 22px; min-height: 0; accent-color: var(--accent); }
+.rem-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+
+/* Boutons de carte un peu plus compacts (4 boutons empilés) */
+.fab { width: 42px; height: 42px; font-size: 1.15rem; }
+.fabs { gap: 7px; }
+.leaflet-bottom.leaflet-left .leaflet-control { margin-left: 8px; }
+.leaflet-left .map-info { margin: 0 0 6px 8px; flex-direction: row-reverse; }
