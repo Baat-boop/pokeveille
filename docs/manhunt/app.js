@@ -39,6 +39,7 @@ const DEFAULT_RULES = {
   flag: null,       // {lat, lng} : drapeau à atteindre (mode drapeau)
   missions: [],     // balises [{lat, lng}] : +1 pouvoir pour le fugitif qui y passe
   bonusEvery: 0,    // un pouvoir offert aux fugitifs toutes les N minutes de survie (0 = non)
+  teams: 0,         // nombre d'équipes de fugitifs (0 = pas d'équipes)
 };
 const MODE_HINT = {
   classic: 'Classique : les chasseurs doivent attraper tous les fugitifs avant la fin du temps.',
@@ -149,7 +150,7 @@ const S = {
   fix: null, geoErr: null, geoWatch: null, wake: null,
   lastLive: 0, lastOutzone: 0, wasOut: false, warnedReveal: 0, finalSent: false,
   tab: 'players', endDismissed: false, lastOutcomeKey: null,
-  clients: [], playerT: {}, onlineBy: {}, tracks: {}, balises: {}, flag: null, solo: false,
+  clients: [], playerT: {}, mates: {}, tlRaw: {}, teamKey: null, ecdh: null, onlineBy: {}, tracks: {}, balises: {}, flag: null, solo: false,
   batt: {}, hist: {}, powers: {}, emoji: '', bat: null, charging: false, swReg: null, fullmap: false,
 };
 const T = (sub) => NS + S.room.id + '/' + sub;
@@ -325,6 +326,8 @@ function onMessage(topic, payload, relay = 0) {
         if (data && data.cleared) onUncaught(id); else if (data) onCaught(id, data);
         break;
       case 'trk': if (data && !older(S.tracks[id], data)) S.tracks[id] = data; break;
+      case 'tk': if (data && id === S.me) await onTeamKey(data); break;
+      case 'tl': if (data && id !== S.me) { S.tlRaw[id] = data; await decodeMates(); } break;
       case 'bal': if (data && !older(S.balises[id], data)) onBalise(+id, data); break;
       case 'flag': if (data && !older(S.flag, data)) onFlag(data); break;
       case 'pings':
@@ -371,7 +374,8 @@ async function enterRoom({ code, create = false, solo = null }) {
     if (!connCount()) throw new Error('Impossible de joindre le serveur de jeu. Vérifie ta connexion et réessaie.');
     await sleep(150);
 
-    await pub('p/' + S.me, { id: S.me, name: S.name, emoji: S.emoji, t: tnow() }, { retain: true });
+    await myKeyPair();
+    await pub('p/' + S.me, { id: S.me, name: S.name, emoji: S.emoji, pk: S.ecdh ? S.ecdh.pub : null, t: tnow() }, { retain: true });
     await pubPresence(true);
 
     if (create || solo) {
@@ -448,7 +452,7 @@ async function leaveRoom(removeMe = true) {
 }
 
 /* ---------- logique du jeu ---------- */
-function resetLog() { S.log = []; S.logKeys = new Set(); S.logSeen = 0; S.warnedReveal = 0; S.finalSent = false; S.wasOut = false; S.endDismissed = false; S.lastOutcomeKey = null; S.hist = {}; S.nearWarned = false; S.inCircleAlerted = {}; S.catches = {}; S.track = null; S.trackSent = null; S.bonusSeen = 0; S.movedWarned = false; }
+function resetLog() { S.log = []; S.logKeys = new Set(); S.logSeen = 0; S.warnedReveal = 0; S.finalSent = false; S.wasOut = false; S.endDismissed = false; S.lastOutcomeKey = null; S.hist = {}; S.nearWarned = false; S.inCircleAlerted = {}; S.catches = {}; S.mates = {}; S.tlRaw = {}; S.teamKey = null; S.teamKeyGame = null; S.teamKeyMine = false; S.tkSent = {}; S.pendingTk = null; S.track = null; S.trackSent = null; S.bonusSeen = 0; S.movedWarned = false; }
 function addLog(key, t, html, { notify = false } = {}) {
   if (S.logKeys.has(key)) return;
   S.logKeys.add(key);
@@ -581,6 +585,8 @@ function onCaught(id, data) {
   if (data.by) S.catches[id + ':' + data.t] = data.by;
   const by = data.by ? ` par <b>${esc(nameOf(data.by))}</b>` : '';
   addLog('caught:' + id + ':' + data.t, data.t, `🎯 <b>${esc(nameOf(id))}</b> s'est fait attraper${by} !`, { notify: true });
+  const tm = teamOf(id);
+  if (tm != null && teamMembers(tm).every(isCaught)) addLog('teamout:' + S.cfg.gameId + ':' + tm + ':' + data.t, data.t + 1, `💀 L'équipe ${teamLabel(tm)} est éliminée !`, { notify: true });
   if (tnow() - data.t < 60000) {
     beep(id === S.me ? 'alarm' : 'good');
     if (id === S.me) toast(S.cfg.rules.prison ? '🔒 Attrapé·e ! Va à la prison (🔒 sur la carte) et attends qu’on te libère.'
@@ -595,13 +601,18 @@ function onUncaught(id) {
 function myTeam() {
   if (!S.cfg || S.cfg.status === 'lobby') return null;
   if (roleOf(S.me) === 'H') return 'H';
-  return baseRole(S.me) === 'F' ? 'F' : null;
+  if (baseRole(S.me) !== 'F') return null;
+  return S.cfg.rules.teams ? 'T' + teamOf(S.me) : 'F';
 }
-function onEvent(ev) {
+async function onEvent(ev) {
   if (ev.type === 'chat') {
     if (ev.team && ev.team !== myTeam()) return;
-    const tag = ev.team ? `<span class="team-tag">${ev.team === 'F' ? '🏃 équipe' : '🔦 équipe'}</span> ` : '';
-    addLog('chat:' + ev.from + ':' + ev.t, ev.t, `${tag}<span class="chat-from">${esc(nameOf(ev.from))} :</span> ${esc(ev.text)}`, { notify: true });
+    let text = ev.text;
+    if (ev.enc) { try { text = (await aesDec(S.teamKey, ev.enc)).text; } catch { return; } }
+    const label = !ev.team ? '' : ev.team === 'F' ? '🏃 équipe' : ev.team === 'H' ? '🔦 équipe' : teamLabel(+ev.team.slice(1));
+    const tag = label ? `<span class="team-tag">${label}</span> ` : '';
+    addLog('chat:' + ev.from + ':' + ev.t, ev.t, `${tag}<span class="chat-from">${esc(nameOf(ev.from))} :</span> ${esc(text)}`, { notify: true });
+    scheduleRender();
   }
 }
 
@@ -828,6 +839,12 @@ async function dutyTick() {
       }
     }
 
+    // Équipes : clé d'équipe et position en direct pour les coéquipiers (même en prison, pour se faire libérer)
+    if (c.rules.teams && baseRole(S.me) === 'F' && roleOf(S.me) !== 'H' && ph.name !== 'lobby') {
+      await teamKeyDuty();
+      await publishMate(now);
+    }
+
     // Rappels appli fermée (ntfy), programmés une fois par partie
     if (role === 'F') scheduleReminders();
 
@@ -900,7 +917,7 @@ async function dutyTick() {
       // Prison : un fugitif libre qui y entre libère tous les prisonniers
       const pr = c.rules.prison;
       if (pr && ph.name === 'hunt' && S.fix && now - (S.lastFree || 0) > 10000 && dist(S.fix, pr) <= pr.r + Math.min(S.fix.acc, 20)) {
-        const prisoners = fugitives().filter((id) => id !== S.me && isCaught(id));
+        const prisoners = fugitives().filter((id) => id !== S.me && isCaught(id) && (!c.rules.teams || teamOf(id) === teamOf(S.me)));
         if (prisoners.length) {
           S.lastFree = now;
           for (const id of prisoners) await pub('caught/' + id, { freed: true, by: S.me, t: now, gameId: gid }, { retain: true });
@@ -988,6 +1005,9 @@ async function startGame() {
   const nF = Object.values(roles).filter((r) => r === 'F').length;
   const nH = Object.values(roles).filter((r) => r === 'H').length;
   if (!nF || !nH) { toast('Il faut au moins un fugitif et un chasseur.'); return; }
+  if (S.cfg.rules.teams && new Set(Object.keys(roles).filter((id) => roles[id] === 'F').map(teamOf)).size < 2) {
+    toast('Il faut des fugitifs dans au moins 2 équipes (ou mets « Équipes : non »).'); return;
+  }
   const r = S.cfg.rules;
   if (r.mode === 'drapeau' && !r.flag) { toast('🚩 Place d’abord le drapeau sur la carte (bouton « 🚩 Drapeau »).'); return; }
   const ok = await confirmBox('Lancer la partie ?',
@@ -1120,6 +1140,125 @@ async function usePower(type) {
   scheduleRender();
 }
 
+/* ---------- équipes de fugitifs ----------
+ * Les coéquipiers se voient en direct. Leurs positions sont chiffrées avec une clé d'équipe que les chasseurs
+ * (organisateur compris) ne peuvent pas lire : la clé est transmise de téléphone à téléphone par échange de clés
+ * (ECDH), chaque téléphone ayant sa propre paire de clés. */
+const TEAMS = [
+  { n: 'Rouges', e: '🔴', c: '#e03131' }, { n: 'Violets', e: '🟣', c: '#9c36b5' },
+  { n: 'Verts', e: '🟢', c: '#2f9e44' }, { n: 'Jaunes', e: '🟡', c: '#f08c00' },
+];
+function teamOf(id) {
+  const c = S.cfg;
+  if (!c || !c.rules.teams || baseRole(id) !== 'F') return null;
+  return ((c.teams && c.teams[id]) || 0) % c.rules.teams;
+}
+const teamLabel = (t) => (t == null ? '' : `${TEAMS[t].e} ${TEAMS[t].n}`);
+/** Répartit les fugitifs présents en `n` équipes équilibrées (au hasard). */
+function distributeTeams(n, roles = S.cfg.roles) {
+  const fug = Object.keys(S.players).filter((id) => (roles[id] || 'H') === 'F');
+  const shuffled = fug.map((id) => [crypto.getRandomValues(new Uint32Array(1))[0], id]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+  const teams = {};
+  shuffled.forEach((id, i) => { teams[id] = i % n; });
+  return teams;
+}
+function smallestTeam(except) {
+  const n = S.cfg.rules.teams, count = Array(n).fill(0);
+  for (const id of Object.keys(S.cfg.roles)) if (id !== except && S.cfg.roles[id] === 'F') count[((S.cfg.teams || {})[id] || 0) % n]++;
+  return count.indexOf(Math.min(...count));
+}
+const teamMembers = (t) => fugitives().filter((id) => teamOf(id) === t);
+const aliveTeams = () => [...new Set(fugitives().filter((id) => !isCaught(id)).map(teamOf))].filter((t) => t != null).sort();
+
+async function aesEnc(key, obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, te.encode(JSON.stringify(obj))));
+  return { iv: b64(iv), ct: b64(ct) };
+}
+async function aesDec(key, d) {
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(d.iv) }, key, unb64(d.ct));
+  return JSON.parse(td.decode(pt));
+}
+const EC = { name: 'ECDH', namedCurve: 'P-256' };
+async function myKeyPair() {
+  if (S.ecdh) return;
+  try {
+    let jwk = store.get('traque.ecdh');
+    if (!jwk) {
+      const kp = await crypto.subtle.generateKey(EC, true, ['deriveKey']);
+      jwk = { pub: await crypto.subtle.exportKey('jwk', kp.publicKey), priv: await crypto.subtle.exportKey('jwk', kp.privateKey) };
+      store.set('traque.ecdh', jwk);
+    }
+    S.ecdh = { pub: { kty: jwk.pub.kty, crv: jwk.pub.crv, x: jwk.pub.x, y: jwk.pub.y }, priv: await crypto.subtle.importKey('jwk', jwk.priv, EC, false, ['deriveKey']) };
+  } catch { S.ecdh = null; /* navigateur trop ancien : pas de position d'équipe en direct */ }
+}
+async function sharedKey(pubJwk) {
+  const pub = await crypto.subtle.importKey('jwk', pubJwk, EC, false, []);
+  return crypto.subtle.deriveKey({ name: 'ECDH', public: pub }, S.ecdh.priv, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function setTeamKey(raw, gameId, t) {
+  S.teamKey = await crypto.subtle.importKey('raw', unb64(raw), 'AES-GCM', false, ['encrypt', 'decrypt']);
+  S.teamKeyGame = gameId; S.teamKeyT = t;
+  await decodeMates();
+}
+/** Clé d'équipe reçue d'un coéquipier (chiffrée pour moi seul). */
+async function onTeamKey(data) {
+  if (!S.cfg || data.gameId !== S.cfg.gameId || !S.ecdh) return;
+  const from = S.players[data.from];
+  if (!from || !from.pk) { S.pendingTk = data; return; }
+  if (S.teamKeyGame === data.gameId && S.teamKeyT && data.t < S.teamKeyT) return;
+  try {
+    const { k } = await aesDec(await sharedKey(from.pk), data);
+    await setTeamKey(k, data.gameId, data.t);
+    S.pendingTk = null;
+  } catch { /* pas pour cette clé */ }
+}
+/** Le « chef » d'équipe (plus petit identifiant) crée la clé et l'envoie à chaque coéquipier. */
+async function teamKeyDuty() {
+  const c = S.cfg;
+  if (!c.rules.teams || c.status !== 'running' || !S.ecdh || roleOf(S.me) === 'H') return;
+  const t = teamOf(S.me);
+  if (t == null) return;
+  if (S.pendingTk) await onTeamKey(S.pendingTk);
+  const members = teamMembers(t).filter((id) => S.players[id] && S.players[id].pk).sort();
+  if (members[0] !== S.me) return;
+  const store_key = 'traque.tk.' + c.gameId;
+  let raw = store.get(store_key);
+  if (!raw) { raw = b64(crypto.getRandomValues(new Uint8Array(32))); store.set(store_key, raw); }
+  if (S.teamKeyGame !== c.gameId || !S.teamKeyMine) { S.teamKeyMine = true; await setTeamKey(raw, c.gameId, tnow()); }
+  S.tkSent = S.tkSent || {};
+  for (const m of members) {
+    if (m === S.me || S.tkSent[m] === c.gameId + ':' + JSON.stringify(S.players[m].pk.x)) continue;
+    const enc = await aesEnc(await sharedKey(S.players[m].pk), { k: raw });
+    await pub('tk/' + m, { gameId: c.gameId, team: t, from: S.me, t: S.teamKeyT, ...enc }, { retain: true });
+    S.tkSent[m] = c.gameId + ':' + JSON.stringify(S.players[m].pk.x);
+  }
+}
+/** Position en direct pour mon équipe (chiffrée avec la clé d'équipe). */
+async function publishMate(now) {
+  if (!S.teamKey || S.teamKeyGame !== S.cfg.gameId || !S.fix) return;
+  const every = ecoOn() ? 15000 : 5000;
+  if (now - (S.lastMate || 0) < every && !(S.fix.t > (S.lastMate || 0) && now - (S.lastMate || 0) > every)) return;
+  S.lastMate = now;
+  const enc = await aesEnc(S.teamKey, { lat: +S.fix.lat.toFixed(6), lng: +S.fix.lng.toFixed(6), acc: S.fix.acc, hdg: myHeading(), spd: mySpeed(), t: now });
+  await pub('tl/' + S.me, { gameId: S.cfg.gameId, t: now, ...enc }, { retain: true });
+}
+async function decodeMates() {
+  if (!S.teamKey || !S.cfg) return;
+  for (const [id, d] of Object.entries(S.tlRaw)) {
+    if (d.gameId !== S.cfg.gameId || teamOf(id) !== teamOf(S.me) || id === S.me) continue;
+    try { S.mates[id] = { ...(await aesDec(S.teamKey, d)), gameId: d.gameId }; delete S.tlRaw[id]; } catch { /* clé d'une autre équipe ou en cours de changement */ }
+  }
+  scheduleRender();
+}
+/** Coéquipier visible en direct (ou null). */
+function mateLive(id) {
+  const c = S.cfg;
+  if (!c || !c.rules.teams || id === S.me || baseRole(S.me) !== 'F' || roleOf(S.me) === 'H' || teamOf(id) !== teamOf(S.me)) return null;
+  const m = S.mates[id];
+  return m && m.gameId === c.gameId ? { ...m, kind: 'mate' } : null;
+}
+
 /* ---------- balises et drapeau ---------- */
 function onBalise(i, data) {
   S.balises[i] = data;
@@ -1156,6 +1295,7 @@ function scoreUpdate(out) {
   }
   for (const by of Object.values(S.catches)) add(by, 3);                     // 3 pts par capture
   if (out.winner === 'H') for (const id of Object.keys(c.roles)) if (c.roles[id] === 'H') add(id, 2);
+  if (c.rules.teams && out.winner === 'F') for (const id of fugitives()) if (aliveTeams().includes(teamOf(id))) add(id, 3); // équipe survivante
   return { scores, scoredGame: c.gameId, games: (c.games || 0) + 1 };
 }
 function renderScores() {
@@ -1165,7 +1305,7 @@ function renderScores() {
   if (!ids.length) return;
   const medal = ['🥇', '🥈', '🥉'];
   $('#scores').innerHTML = ids.map((id, i) => `<li><span>${medal[i] || (i + 1) + '.'}</span> ${esc(avatarOf(id))} <b>${esc(nameOf(id))}</b><span class="pts">${sc[id]} pt${sc[id] > 1 ? 's' : ''}</span></li>`).join('');
-  $('#scores-hint').textContent = `${c.games || 0} partie${(c.games || 0) > 1 ? 's' : ''} jouée${(c.games || 0) > 1 ? 's' : ''}. Fugitif : 1 pt toutes les 5 min de survie, +5 si jamais attrapé. Chasseur : 3 pts par capture, +2 si victoire.`;
+  $('#scores-hint').textContent = `${c.games || 0} partie${(c.games || 0) > 1 ? 's' : ''} jouée${(c.games || 0) > 1 ? 's' : ''}. Fugitif : 1 pt toutes les 5 min de survie, +5 si jamais attrapé, +3 si son équipe survit. Chasseur : 3 pts par capture, +2 si victoire.`;
   $('#btn-score-reset').hidden = !isHost();
 }
 
@@ -1231,7 +1371,13 @@ function recapHtml(out) {
   if (m) awards.push(`👟 Marathonien : <b>${esc(nameOf(m[0]))}</b> (${fmtDist(m[1])})`);
   const v = best((id) => (tr[id] ? tr[id].vmax : 0));
   if (v) awards.push(`⚡ Fusée : <b>${esc(nameOf(v[0]))}</b> (${kmh(v[1])})`);
-  return (awards.length ? `<li class="awards">${awards.join('<br>')}</li>` : '') + rows.join('');
+  const teamRows = c.rules.teams ? TEAMS.slice(0, c.rules.teams).map((tt, i) => {
+    const mem = teamMembers(i);
+    if (!mem.length) return '';
+    const free = mem.filter((id) => !isCaught(id)).length;
+    return `<li class="team-row" style="--team:${tt.c}">${teamLabel(i)} : ${free ? `${free} survivant${free > 1 ? 's' : ''} sur ${mem.length} ✅` : 'éliminée 💀'}</li>`;
+  }).join('') : '';
+  return (awards.length ? `<li class="awards">${awards.join('<br>')}</li>` : '') + teamRows + rows.join('');
 }
 
 /* ---------- notifications ---------- */
@@ -1584,14 +1730,18 @@ function renderGameMap() {
 
   const seen = new Set();
   for (const id of Object.keys(S.players)) {
-    const p = visiblePos(id);
+    const mate = mateLive(id);
+    const p = mate || visiblePos(id);
     if (!p) continue;
     seen.add(id);
     const role = p.kind === 'live' ? 'H' : 'F';
     const age = tnow() - p.t;
-    const old = p.kind === 'live' ? age > 90000 : false;
-    const label = esc(anonHidden(id) ? '❓ ' + (role === 'F' ? 'Fugitif' : 'Chasseur') : nameOf(id)) + (p.kind === 'live' ? '' : ' · ' + (age < 45000 ? 'maintenant' : ago(p.t).replace('il y a ', ''))) + (p.r ? ` · cercle n°${p.lvl || 1} ≈${fmtDist(p.r)}` : '');
-    const html = `${old ? '' : headingHtml(p.hdg, role)}<div class="pin ${role} ${old ? 'old' : ''} ${p.r ? 'fuzzy' : ''}">${anonHidden(id) ? '?' : esc(avatarOf(id) || nameOf(id).slice(0, 1).toUpperCase())}</div><div class="pin-label">${label}</div>`;
+    const old = p.kind === 'live' || mate ? age > 90000 : false;
+    const tm = !anonHidden(id) ? teamOf(id) : null;
+    const label = esc(anonHidden(id) ? '❓ ' + (role === 'F' ? 'Fugitif' : 'Chasseur') : nameOf(id))
+      + (mate ? ' · équipier' : p.kind === 'live' ? '' : ' · ' + (age < 45000 ? 'maintenant' : ago(p.t).replace('il y a ', '')))
+      + (p.r && !mate ? ` · cercle n°${p.lvl || 1} ≈${fmtDist(p.r)}` : '');
+    const html = `${old ? '' : headingHtml(p.hdg, role)}<div class="pin ${role} ${old ? 'old' : ''} ${p.r && !mate ? 'fuzzy' : ''} ${tm != null ? 'teamed' : ''}" ${tm != null ? `style="--team:${TEAMS[tm].c}"` : ''}>${anonHidden(id) ? '?' : esc(avatarOf(id) || nameOf(id).slice(0, 1).toUpperCase())}</div><div class="pin-label">${label}</div>`;
     const icon = L.divIcon({ className: 'pm', html, iconSize: [0, 0] });
     if (!markers[id]) markers[id] = L.marker([p.lat, p.lng], { icon }).addTo(gameMap);
     else { markers[id].setLatLng([p.lat, p.lng]); markers[id].setIcon(icon); }
@@ -1661,12 +1811,14 @@ function renderLobby() {
     return `<li class="player">
       <span class="dot ${S.online[id] ? 'on' : ''}"></span>
       <div class="who"><div class="pname">${esc(avatarOf(id))} ${esc(nameOf(id))}${id === S.me ? ' (toi)' : ''} ${battHtml(id)}</div>${meta ? `<div class="pmeta">${meta}</div>` : ''}</div>
-      <button class="role-chip role-${role}" data-role="${esc(id)}" ${host ? '' : 'disabled'}>${ROLE_LABEL[role]}</button>
+      <button class="role-chip role-${role} ${c.rules.teams ? 'compact' : ''}" data-role="${esc(id)}" title="${ROLE_LABEL[role].slice(3)}" ${host ? '' : 'disabled'}>${c.rules.teams ? ROLE_LABEL[role].split(' ')[0] : ROLE_LABEL[role]}</button>
+      ${role === 'F' && c.rules.teams ? `<button class="team-chip" data-team="${esc(id)}" style="--team:${TEAMS[teamOf(id)].c}" ${host ? '' : 'disabled'}>${teamLabel(teamOf(id))}</button>` : ''}
       ${host && id !== S.me ? `<button class="kick" data-kick="${esc(id)}" aria-label="Retirer ${esc(nameOf(id))}">✕</button>` : ''}
     </li>`;
   }).join('');
   const nF = ids.filter((id) => baseRole(id) === 'F').length, nH = ids.filter((id) => baseRole(id) === 'H').length;
-  $('#lobby-roles-hint').textContent = `${nF} fugitif${nF > 1 ? 's' : ''}, ${nH} chasseur${nH > 1 ? 's' : ''}` + (host ? ' · touche un rôle pour le changer.' : '');
+  const teamsTxt = c.rules.teams ? ' · ' + TEAMS.slice(0, c.rules.teams).map((tt, i) => `${tt.e} ${ids.filter((id) => teamOf(id) === i).length}`).join('  ') : '';
+  $('#lobby-roles-hint').textContent = `${nF} fugitif${nF > 1 ? 's' : ''}, ${nH} chasseur${nH > 1 ? 's' : ''}` + teamsTxt + (host ? ' · touche un rôle ou une équipe pour la changer.' : '');
 
   // Tirage au sort
   const box = $('#draw-box');
@@ -1675,8 +1827,9 @@ function renderLobby() {
       box.dataset.n = ids.length;
       const opts = [];
       for (let i = 1; i < ids.length; i++) opts.push(`<option value="${i}">${i} fugitif${i > 1 ? 's' : ''}</option>`);
-      box.innerHTML = `<select id="draw-n" aria-label="Nombre de fugitifs">${opts.join('')}</select><button class="btn small" id="btn-draw">🎲 Tirer au sort</button>`;
+      box.innerHTML = `<select id="draw-n" aria-label="Nombre de fugitifs">${opts.join('')}</select><button class="btn small" id="btn-draw">🎲 Tirer au sort</button><button class="btn small" id="btn-draw-teams">🎲 Équipes</button>`;
     }
+    $('#btn-draw-teams').hidden = !c.rules.teams;
   } else { box.innerHTML = ''; box.dataset.n = ''; }
 
   // Règles
@@ -1782,15 +1935,16 @@ function renderGame() {
   ids.sort((a, b) => 'FHS'.indexOf(roleOf(a)) - 'FHS'.indexOf(roleOf(b)));
   $('#game-players').innerHTML = ids.map((id) => {
     const r = roleOf(id), base = baseRole(id), caught = base === 'F' && isCaught(id);
-    const p = anonHidden(id) ? null : visiblePos(id);
+    const mate = mateLive(id);
+    const p = mate || (anonHidden(id) ? null : visiblePos(id));
     const meta = [];
     if (caught) {
       const k = S.caught[id];
       meta.push(`attrapé·e${k.by ? ' par ' + esc(nameOf(k.by)) : ''} à ${hhmm(k.t)}`);
     }
     if (p) {
-      let s = (p.kind === 'live' ? 'en direct' : 'vu·e ' + ago(p.t));
-      if (S.fix && p.r) {
+      let s = (mate ? '🤝 équipier · en direct' : p.kind === 'live' ? 'en direct' : 'vu·e ' + ago(p.t));
+      if (S.fix && p.r && !mate) {
         const d = dist(S.fix, p);
         s += ` · cercle de ${fmtDist(p.r)} · ` + (d <= p.r ? '<b>tu es dans son cercle !</b>' : 'à ' + fmtDist(d - p.r));
       } else if (S.fix) s += ' · à ' + fmtDist(dist(S.fix, p));
@@ -1806,6 +1960,8 @@ function renderGame() {
     if (caught && S.cfg.rules.prison) meta.push('🔒 en prison');
     if (id === S.me && S.fix && mySpeed() >= 0.5) meta.push(kmh(mySpeed()));
     if (!S.online[id]) meta.push('hors ligne');
+    const tmb = !anonHidden(id) ? teamOf(id) : null;
+    if (tmb != null) meta.unshift(`<span class="team-badge" style="--team:${TEAMS[tmb].c}">${teamLabel(tmb)}</span>`);
     const chip = caught && r !== 'H' ? (c.rules.prison ? '🔒 Prison' : 'Attrapé·e') : ROLE_LABEL[r];
     return `<li class="player ${caught ? 'caught' : ''} ${p ? 'clickable' : ''}" ${p ? `data-focus="${esc(id)}"` : ''}>
       <span class="dot ${S.online[id] ? 'on' : ''}"></span>
@@ -1904,7 +2060,10 @@ function renderEnd(out) {
   if (S.endDismissed) return;
   const c = S.cfg;
   $('#end-emoji').textContent = out.winner === 'F' ? '🏃' : '🔦';
-  $('#end-title').textContent = out.winner === 'F' ? 'Les fugitifs gagnent !' : 'Les chasseurs gagnent !';
+  const alive = c.rules.teams && out.winner === 'F' ? aliveTeams() : [];
+  $('#end-title').textContent = alive.length
+    ? `${alive.map(teamLabel).join(' et ')} ${alive.length > 1 ? 'gagnent' : 'gagnent'} !`
+    : out.winner === 'F' ? 'Les fugitifs gagnent !' : 'Les chasseurs gagnent !';
   $('#end-reason').textContent = out.reason === 'time' ? 'Le temps est écoulé.'
     : out.reason === 'all-caught' ? 'Tous les fugitifs ont été attrapés.'
       : out.reason === 'host' ? 'Partie arrêtée par l’organisateur.'
@@ -1982,7 +2141,15 @@ $('#lobby-players').addEventListener('click', async (e) => {
   if (r && isHost()) {
     const id = r.dataset.role;
     const next = baseRole(id) === 'F' ? 'H' : 'F';
-    await pubCfg({ roles: { ...S.cfg.roles, [id]: next } });
+    const teams = { ...(S.cfg.teams || {}) };
+    if (next === 'F' && S.cfg.rules.teams) teams[id] = smallestTeam(id);
+    await pubCfg({ roles: { ...S.cfg.roles, [id]: next }, teams });
+    return;
+  }
+  const tc = e.target.closest('[data-team]');
+  if (tc && isHost()) {
+    const id = tc.dataset.team;
+    await pubCfg({ teams: { ...(S.cfg.teams || {}), [id]: (teamOf(id) + 1) % S.cfg.rules.teams } });
     return;
   }
   const k = e.target.closest('[data-kick]');
@@ -1996,18 +2163,29 @@ $('#lobby-players').addEventListener('click', async (e) => {
   }
 });
 $('#draw-box').addEventListener('click', async (e) => {
+  if (e.target.closest('#btn-draw-teams') && isHost()) {
+    await pubCfg({ teams: distributeTeams(S.cfg.rules.teams) });
+    toast('🎲 Équipes tirées au sort !');
+    return;
+  }
   if (!e.target.closest('#btn-draw') || !isHost()) return;
   const ids = Object.keys(S.players), n = +$('#draw-n').value;
   const shuffled = ids.map((id) => [crypto.getRandomValues(new Uint32Array(1))[0], id]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
   const roles = {};
   shuffled.forEach((id, i) => { roles[id] = i < n ? 'F' : 'H'; });
-  await pubCfg({ roles });
+  await pubCfg({ roles, ...(S.cfg.rules.teams ? { teams: distributeTeams(S.cfg.rules.teams, roles) } : {}) });
   toast('🎲 Rôles tirés au sort !');
 });
 $('#rules-form').addEventListener('change', (e) => {
   const el = e.target.closest('[data-rule]');
   if (!el || !isHost()) return;
-  pubRules({ [el.dataset.rule]: el.type === 'checkbox' ? el.checked : el.dataset.type === 'str' ? el.value : +el.value });
+  const val = el.type === 'checkbox' ? el.checked : el.dataset.type === 'str' ? el.value : +el.value;
+  if (el.dataset.rule === 'teams' && val > 0) {
+    S.cfg = { ...S.cfg, rules: { ...S.cfg.rules, teams: val } };
+    pubCfg({ teams: distributeTeams(val) });
+    return;
+  }
+  pubRules({ [el.dataset.rule]: val });
 });
 $('#btn-zone-here').onclick = () => {
   if (!S.fix) { toast(S.geoErr === 'denied' ? 'Localisation refusée dans le navigateur.' : 'Position pas encore trouvée…'); return; }
@@ -2110,7 +2288,8 @@ document.addEventListener('click', async (e) => {
     else if (act === 'become-host') { if (await confirmBox('Prendre le relais ?', 'Tu pourras terminer la partie et en relancer une.', 'Oui')) pubCfg({ host: S.me }); }
     else if (act === 'end') {
       if (await confirmBox('Terminer la partie ?', 'Les fugitifs encore en fuite gagnent.', 'Terminer', 'danger')) {
-        pubCfg({ status: 'ended', winner: 'F', endReason: 'host', endedAt: tnow() });
+        const at = tnow();
+        pubCfg({ status: 'ended', winner: 'F', endReason: 'host', endedAt: at, ...scoreUpdate({ winner: 'F', reason: 'host', at }) });
       }
     }
     return;
@@ -2163,6 +2342,11 @@ $('#chat').addEventListener('submit', async (e) => {
   if (!text) return;
   $('#chat-input').value = '';
   const team = S.chatScope === 'team' ? myTeam() : null;
+  if (team && team[0] === 'T') {
+    if (!S.teamKey) { toast('🔒 Clé d’équipe pas encore reçue : réessaie dans quelques secondes.'); $('#chat-input').value = text; return; }
+    await pub('ev', { type: 'chat', from: S.me, t: tnow(), team, enc: await aesEnc(S.teamKey, { text }) });
+    return;
+  }
   const ev = { type: 'chat', from: S.me, text, t: tnow(), team };
   await pub('ev', ev);
 });
@@ -2418,7 +2602,7 @@ setInterval(() => {
  * GitHub Pages laisse les navigateurs garder les fichiers jusqu'à 10 min. Au démarrage (et au retour sur la page),
  * on compare la version chargée à celle du site ; si elle est plus récente, on recharge sans cache.
  * À chaque modification de l'appli : changer APP_VERSION, version.txt et les ?v= de index.html. */
-const APP_VERSION = '2026-11-18c';
+const APP_VERSION = '2026-11-18d';
 async function checkUpdate() {
   try {
     if (S.screen === 'game' && S.cfg && S.cfg.status === 'running') return; // jamais en pleine partie
@@ -2436,7 +2620,7 @@ checkUpdate();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
 
 // Démarrage
-if (qs.get('fast')) window.__traque = { S, zoneState, pubRules, pubCfg, outcome, powersLeft, connCount };
+if (qs.get('fast')) window.__traque = { S, zoneState, pubRules, pubCfg, outcome, powersLeft, connCount, teamOf, mateLive };
 initHome();
 const h0 = parseHash();
 if (h0.code) $(store.get('traque.name') ? '#btn-join' : '#name').focus();
