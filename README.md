@@ -72,9 +72,10 @@ node tools/serve.mjs          # aperçu sur http://localhost:8080/docs/?local
 
 ## Bonus : Traque (Manhunt entre potes)
 
-Petit jeu de chasse à l'homme grandeur nature, dans `docs/manhunt/` : https://baat-boop.github.io/pokeveille/manhunt/
+Jeu de chasse à l'homme grandeur nature, dans `docs/manhunt/` : https://baat-boop.github.io/pokeveille/manhunt/
 
-- Une personne crée la partie et partage le lien ou le QR code. Les autres rejoignent avec le code à 6 caractères. Pas de compte, pas d'installation.
-- Fugitifs contre chasseurs : avance au départ, position des fugitifs révélée à intervalle régulier, radars pour les chasseurs, zone de jeu, chat, fin automatique.
-- Les téléphones se parlent via un relais MQTT public gratuit (EMQX, avec HiveMQ et Mosquitto en secours). Tout est chiffré avec le code de la partie. Les fugitifs n'envoient leur position qu'au moment d'une révélation.
-- Garder la page ouverte pendant la partie : l'écran reste allumé tout seul, mais un téléphone verrouillé n'envoie rien.
+- Une personne crée la partie et partage le lien ou le QR code. Les autres rejoignent avec le code à 6 caractères. Pas de compte, pas d'installation (mais installable sur l'écran d'accueil).
+- Modes : classique, infection, cache-cache, capture du drapeau. Révélations régulières (point exact ou cercle qui rétrécit quand un chasseur y entre), zone qui rétrécit, zones interdites, prison, balises, radars, brouillage, contre-radar, riposte, mode anonyme, chat d'équipe, classement de la soirée, récap et replay de fin de partie.
+- Partie d'essai solo contre des robots, sans connexion.
+- Les téléphones se parlent via des relais MQTT publics gratuits (EMQX, HiveMQ, Mosquitto), tous utilisés en même temps : si l'un tombe, la partie continue. Tout est chiffré avec le code de la partie ; les fugitifs n'envoient jamais leur position en continu.
+- Garder la page ouverte pendant la partie (l'écran reste allumé tout seul). Pour être prévenu appli fermée : rappels via l'appli gratuite ntfy.

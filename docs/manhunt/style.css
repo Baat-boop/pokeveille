@@ -316,3 +316,39 @@ code.topic { display: inline-block; background: var(--surface-2); padding: .2rem
 .zone-saved select { flex: 1; min-height: 40px; }
 #zone-extra:empty { display: none; }
 .spot { position: absolute; left: -14px; top: -16px; font-size: 1.5rem; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
+
+/* Partie d'essai, classement */
+#btn-solo { margin-top: .2rem; }
+.scores { list-style: none; padding: 0; margin: 0; }
+.scores li { display: flex; align-items: center; gap: .45rem; padding: .45rem 0; border-top: 1px solid var(--line); }
+.scores li:first-child { border-top: 0; }
+.scores .pts { margin-left: auto; font-weight: 800; color: var(--accent); }
+.rules-form label.wide { grid-column: 1 / -1; }
+.map-mode { flex-wrap: wrap; }
+.map-mode button { flex: 1 1 30%; }
+.spot.taken { opacity: .55; }
+
+/* Chat d'équipe */
+.chat #chat-scope { flex-shrink: 0; padding: .5rem .6rem; }
+.team-tag { font-size: .72rem; font-weight: 700; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
+
+/* Récap de fin */
+.recap .awards { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); border-radius: 10px; padding: .6rem .7rem; border-top: 0; margin-bottom: .4rem; line-height: 1.7; }
+
+/* Replay */
+.replay-bar {
+  position: absolute; z-index: 700; left: 10px; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 12px);
+  max-width: 520px; margin: 0 auto; display: flex; align-items: center; gap: 8px;
+  background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); padding: 8px 10px;
+}
+.replay-bar input[type=range] { flex: 1; min-height: 30px; padding: 0; border: 0; background: transparent; accent-color: var(--accent); }
+.replay-bar .rp-time { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 3.2em; text-align: right; }
+.replay-bar #rp-play { min-width: 46px; }
+body.replay .sheet, body.replay .banner, body.replay .fabs #btn-full { display: none; }
+body.replay .fabs { bottom: 90px; }
+body.replay .leaflet-marker-pane .pm:not(.rp):not(.keep) { display: none; }
+body.replay .leaflet-overlay-pane path:not(.rp):not(.zp) { display: none; }
+
+/* Indicateur de connexion : partiel = orange */
+.conn.part { background: var(--warn); }
+.conn:not(.ok):not(.part) { background: var(--fug); }

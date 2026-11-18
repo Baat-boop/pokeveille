@@ -9,6 +9,14 @@
   <title>Traque — Manhunt entre potes</title>
   <meta name="description" content="Chasse à l'homme grandeur nature avec tes potes : fugitifs contre chasseurs, positions révélées à intervalles réguliers.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AF%3C/text%3E%3C/svg%3E">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Traque">
+  <meta property="og:title" content="🎯 Traque : rejoins la chasse à l'homme !">
+  <meta property="og:description" content="Fugitifs contre chasseurs, grandeur nature dans ta ville. Ouvre le lien, entre ton prénom, c'est parti.">
+  <meta property="og:image" content="https://baat-boop.github.io/pokeveille/manhunt/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="vendor/leaflet.css">
@@ -43,6 +51,8 @@
       <button id="btn-join" class="btn">Rejoindre</button>
     </div>
 
+    <button id="btn-solo" class="btn ghost">🤖 Partie d'essai solo (contre des robots)</button>
+
     <details class="rules">
       <summary>Comment on joue ?</summary>
       <ol>
@@ -56,6 +66,8 @@
         <li>Les fugitifs peuvent apparaître dans un <b>cercle</b> plutôt qu'en point exact. Quand un chasseur entre dans ce cercle, il rétrécit autour du fugitif.</li>
         <li>Prison (si l'organisateur en place une) : un fugitif attrapé va en prison ; un fugitif libre qui y entre libère tout le monde.</li>
         <li>Zones interdites ⛔ : y entrer révèle ta position, comme une sortie de zone.</li>
+        <li>Modes : classique, infection (chaque attrapé devient chasseur), cache-cache (on ne bouge plus après l'avance), capture du drapeau.</li>
+        <li>Balises 🎁 : le premier fugitif qui passe dessus gagne un pouvoir.</li>
         <li>Pouvoirs : les fugitifs peuvent <b>brouiller</b> une révélation ou lancer un <b>contre-radar</b> pour voir les chasseurs 30 s, et <b>riposter</b> après un radar.</li>
         <li>Les fugitifs gagnent s'il en reste au moins un à la fin du temps. Sinon, victoire des chasseurs.</li>
       </ol>
@@ -93,10 +105,26 @@
       <p class="hint" id="lobby-roles-hint"></p>
     </div>
 
+    <div class="card" id="score-card" hidden>
+      <div class="card-head">
+        <h2>🏆 Classement de la soirée</h2>
+        <button class="btn small ghost" id="btn-score-reset">Remettre à zéro</button>
+      </div>
+      <ol class="scores" id="scores"></ol>
+      <p class="hint" id="scores-hint"></p>
+    </div>
+
     <div class="card">
       <h2>Règles</h2>
       <div class="rules-form" id="rules-form">
         <h3 class="rules-sub">Partie</h3>
+        <label class="wide">Mode de jeu
+          <select data-rule="mode" data-type="str">
+            <option value="classic">🎯 Classique</option><option value="infection">🦠 Infection</option>
+            <option value="cachecache">🙈 Cache-cache</option><option value="drapeau">🚩 Capture du drapeau</option>
+          </select>
+        </label>
+        <p class="hint rules-note" id="mode-hint"></p>
         <label>Durée totale
           <select data-rule="duration">
             <option value="15">15 min</option><option value="20">20 min</option><option value="30">30 min</option>
@@ -187,6 +215,11 @@
             <option value="0">Aucun</option><option value="1">1</option><option value="2">2</option><option value="3">3</option>
           </select>
         </label>
+        <label>⏱️ Bonus de survie
+          <select data-rule="bonusEvery">
+            <option value="0">Non</option><option value="10">Toutes les 10 min</option><option value="15">Toutes les 15 min</option><option value="20">Toutes les 20 min</option>
+          </select>
+        </label>
         <label class="check"><input type="checkbox" data-rule="riposte"> ↩️ Riposte : après un radar, chaque fugitif peut voir 30 s le chasseur qui l'a lancé</label>
         <p class="hint rules-note">Radar : révèle tous les fugitifs tout de suite. Brouillage : le fugitif saute sa prochaine révélation. Contre-radar : le fugitif voit tous les chasseurs pendant 30 s.</p>
       </div>
@@ -205,6 +238,8 @@
         <button type="button" role="radio" data-mode="zone" aria-checked="true">⭕ Zone</button>
         <button type="button" role="radio" data-mode="prison" aria-checked="false">🔒 Prison</button>
         <button type="button" role="radio" data-mode="nogo" aria-checked="false">⛔ Interdite</button>
+        <button type="button" role="radio" data-mode="mission" aria-checked="false">🎁 Balise</button>
+        <button type="button" role="radio" data-mode="flag" aria-checked="false">🚩 Drapeau</button>
       </div>
       <p class="hint" id="map-mode-hint"></p>
       <div id="lobby-map" class="lobby-map"></div>
@@ -221,6 +256,8 @@
         </label>
         <button class="btn ghost small" id="btn-prison-clear">Retirer la prison</button>
         <button class="btn ghost small" id="btn-nogo-clear">Effacer les zones interdites</button>
+        <button class="btn ghost small" id="btn-missions-clear">Effacer les balises</button>
+        <button class="btn ghost small" id="btn-flag-clear">Retirer le drapeau</button>
       </div>
       <div class="zone-saved" id="zone-saved-box">
         <select id="zone-saved" aria-label="Zones enregistrées"></select>
@@ -272,10 +309,19 @@
     <div class="tab-body" id="tab-log" hidden>
       <ul class="log" id="log"></ul>
       <form class="chat" id="chat">
+        <button type="button" class="btn ghost" id="chat-scope" title="Tout le monde ou ton équipe">👥 Tous</button>
         <input id="chat-input" maxlength="200" placeholder="Message à tout le monde…" autocomplete="off">
         <button class="btn" type="submit">Envoyer</button>
       </form>
     </div>
+  </div>
+
+  <div class="replay-bar" id="replay-bar" hidden>
+    <button class="btn" id="rp-play" aria-label="Lecture ou pause">⏸</button>
+    <input type="range" id="rp-range" min="0" max="1000" value="0" aria-label="Moment de la partie">
+    <span class="rp-time" id="rp-time">0:00</span>
+    <button class="btn ghost small" id="rp-speed">×60</button>
+    <button class="btn ghost small" id="rp-close" aria-label="Fermer le replay">✕</button>
   </div>
 
   <div class="end" id="end" hidden>
