@@ -12,7 +12,7 @@
 
 const qs = new URLSearchParams(location.search);
 const BROKERS = qs.get('broker')
-  ? [qs.get('broker')]
+  ? qs.get('broker').split(',')
   : ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
 // ?fast=1 : une « minute » dure une seconde (tests uniquement).
 const MIN = qs.get('fast') ? 1000 : 60000;
@@ -35,6 +35,16 @@ const DEFAULT_RULES = {
   anon: false,      // mode anonyme : les chasseurs ne savent pas quel fugitif est où (et inversement)
   prison: null,     // {lat, lng, r} : les fugitifs attrapés y vont, un fugitif libre qui y entre les libère
   nogo: [],         // zones interdites [{lat, lng, r}]
+  mode: 'classic',  // classic | infection | cachecache | drapeau
+  flag: null,       // {lat, lng} : drapeau à atteindre (mode drapeau)
+  missions: [],     // balises [{lat, lng}] : +1 pouvoir pour le fugitif qui y passe
+  bonusEvery: 0,    // un pouvoir offert aux fugitifs toutes les N minutes de survie (0 = non)
+};
+const MODE_HINT = {
+  classic: 'Classique : les chasseurs doivent attraper tous les fugitifs avant la fin du temps.',
+  infection: 'Infection : chaque fugitif attrapé devient chasseur. Le dernier fugitif libre gagne.',
+  cachecache: 'Cache-cache : après l’avance, les fugitifs ne bougent plus. Quitter sa cachette (plus de 40 m) révèle sa position.',
+  drapeau: 'Capture du drapeau : place le drapeau 🚩 sur la carte. Un fugitif qui l’atteint fait gagner les fugitifs.',
 };
 const PRISON_R = 25;
 const ZONE_COLORS = { orange: '#e8590c', rouge: '#e03131', rose: '#d6336c', violet: '#9c36b5', bleu: '#1c7ed6', vert: '#2f9e44' };
@@ -63,7 +73,7 @@ function clock(ms) {
   return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
 }
 function ago(t) {
-  const s = Math.round((Date.now() - t) / 1000);
+  const s = Math.round((tnow() - t) / 1000);
   if (s < 45) return "à l'instant";
   const m = Math.round(s / 60);
   if (m < 60) return `il y a ${m} min`;
@@ -139,6 +149,7 @@ const S = {
   fix: null, geoErr: null, geoWatch: null, wake: null,
   lastLive: 0, lastOutzone: 0, wasOut: false, warnedReveal: 0, finalSent: false,
   tab: 'players', endDismissed: false, lastOutcomeKey: null,
+  clients: [], playerT: {}, onlineBy: {}, tracks: {}, balises: {}, flag: null, solo: false,
   batt: {}, hist: {}, powers: {}, emoji: '', bat: null, charging: false, swReg: null, fullmap: false,
 };
 const T = (sub) => NS + S.room.id + '/' + sub;
@@ -177,8 +188,18 @@ const confirmBox = (title, body, okLabel = 'Confirmer', cls = 'primary') =>
   ask(title, body ? `<p>${body}</p>` : '', [{ label: 'Annuler', value: null, cls: 'ghost' }, { label: okLabel, value: 'ok', cls }]).then((v) => v === 'ok');
 
 let audioCtx;
+/** Alerte : 'sound' (son + vibreur), 'vibrate' (vibreur seul) ou 'silent'. En auto, les fugitifs sont en vibreur : un bip trahirait leur cachette. */
+function alertMode() {
+  const m = store.get('traque.alert') || 'auto';
+  if (m !== 'auto') return m;
+  return S.cfg && S.cfg.status !== 'lobby' && baseRole(S.me) === 'F' ? 'vibrate' : 'sound';
+}
+const ALERT_LABEL = { auto: '🔔 Alertes : auto', sound: '🔊 Son + vibreur', vibrate: '📳 Vibreur seul', silent: '🔕 Muet' };
+const ecoOn = () => store.get('traque.eco') === true || (S.bat != null && S.bat <= 20 && !S.charging);
 function beep(kind = 'info') {
-  try {
+  const mode = alertMode();
+  if (mode === 'silent') return;
+  if (mode === 'sound') try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     const notes = kind === 'alarm' ? [880, 660, 880] : kind === 'good' ? [523, 659, 784] : [740, 988];
     notes.forEach((f, i) => {
@@ -188,46 +209,77 @@ function beep(kind = 'info') {
       const t0 = audioCtx.currentTime + i * 0.16; o.start(t0); o.stop(t0 + 0.12);
     });
   } catch { /* pas de son */ }
-  try { navigator.vibrate && navigator.vibrate(kind === 'alarm' ? [300, 120, 300, 120, 300] : [200, 80, 200]); } catch { /* idem */ }
+  try { if (navigator.vibrate) navigator.vibrate(kind === 'alarm' ? [300, 120, 300, 120, 300] : [200, 80, 200]); } catch { /* idem */ }
 }
 document.addEventListener('pointerdown', () => { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch { /* idem */ } }, { once: true });
 
-/* ---------- réseau ---------- */
-function connectBroker(url, will, timeout = 8000) {
-  return new Promise((resolve, reject) => {
-    const c = mqtt.connect(url, {
-      clientId: 'tq_' + randStr(12), clean: true, keepalive: 30, reconnectPeriod: 2000,
-      connectTimeout: timeout, protocolVersion: 4, will,
-    });
-    const t = setTimeout(() => { c.end(true); reject(new Error('timeout')); }, timeout);
-    c.once('connect', () => { clearTimeout(t); resolve(c); });
-    c.on('error', () => { /* mqtt.js réessaie tout seul ; le délai tranche */ });
+/* ---------- réseau ----------
+ * Chaque téléphone se connecte à TOUS les relais en même temps et publie sur chacun.
+ * Si un relais tombe en pleine partie, les autres prennent le relais sans que personne ne s'en rende compte.
+ * Les messages reçus en double (un par relais) ou en retard sont triés grâce à leur horodatage. */
+function mkClient(url, will) {
+  if (url === 'local') return localBroker.client();
+  return mqtt.connect(url, {
+    clientId: 'tq_' + randStr(12), clean: true, keepalive: 30, reconnectPeriod: 3000,
+    connectTimeout: 8000, protocolVersion: 4, will, queueQoSZero: false,
   });
 }
-/** Cherche sur quel relais se trouve la partie (celui qui a sa configuration). */
-function findRoom() {
-  const topic = T('cfg');
-  return new Promise((resolve) => {
-    let done = false; const clients = [];
-    const finish = (i) => { if (done) return; done = true; clients.forEach((c) => c && c.end(true)); resolve(i); };
-    BROKERS.forEach((url, i) => {
-      const c = mqtt.connect(url, { clientId: 'tq_' + randStr(12), clean: true, reconnectPeriod: 0, connectTimeout: 7000, protocolVersion: 4 });
-      clients[i] = c;
-      c.on('connect', () => c.subscribe(topic, { qos: 1 }));
-      c.on('message', (_t, payload) => { if (payload && payload.length) finish(i); });
-      c.on('error', () => {});
-    });
-    setTimeout(() => finish(-1), 9000);
-  });
+/** Relais local en mémoire (partie d'essai solo avec des robots, sans réseau). */
+class LocalBroker {
+  constructor() { this.retained = new Map(); this.clients = new Set(); }
+  client() {
+    const b = this, h = {};
+    const c = {
+      connected: false, subs: [],
+      on(ev, fn) { (h[ev] || (h[ev] = [])).push(fn); return c; },
+      once(ev, fn) { const w = (...a) => { h[ev] = h[ev].filter((x) => x !== w); fn(...a); }; return c.on(ev, w); },
+      emit(ev, ...a) { (h[ev] || []).slice().forEach((f) => f(...a)); },
+      subscribe(t, _o, cb) {
+        const pre = t.replace('#', ''); c.subs.push(pre);
+        for (const [k, v] of b.retained) if (k.startsWith(pre)) setTimeout(() => c.emit('message', k, v), 0);
+        if (cb) cb(null);
+      },
+      publish(t, payload, o = {}) {
+        if (o.retain) { if (payload === '') b.retained.delete(t); else b.retained.set(t, payload); }
+        for (const x of b.clients) if (x.subs.some((pre) => t.startsWith(pre))) setTimeout(() => x.emit('message', t, payload), 5);
+      },
+      end() { b.clients.delete(c); c.connected = false; },
+    };
+    b.clients.add(c);
+    setTimeout(() => { c.connected = true; c.emit('connect'); }, 0);
+    return c;
+  }
 }
+let localBroker = null;
+function connCount() { return S.clients.filter((c) => c.connected).length; }
 async function pub(sub, obj, { retain = false, qos = 1 } = {}) {
-  if (!S.client) return;
+  if (!S.clients.length || !S.room) return;
   const payload = obj == null ? '' : await seal(S.room.key, obj);
-  S.client.publish(T(sub), payload, { retain, qos });
+  const live = S.clients.filter((c) => c.connected);
+  for (const c of (live.length ? live : S.clients)) { try { c.publish(T(sub), payload, { retain, qos }); } catch { /* relais en panne */ } }
 }
+/** Ancien message (renvoyé par un relais qui revient, ou arrivé en double) ? */
+const older = (prev, data) => prev && data && prev.t != null && data.t != null && data.t < prev.t;
+
+/* ---------- horloge commune ----------
+ * Si l'heure d'un téléphone est fausse, son compte à rebours serait décalé. On la cale sur l'heure du serveur du site. */
+let CLOCK_OFF = 0;
+const tnow = () => Date.now() + CLOCK_OFF;
+async function syncClock() {
+  try {
+    const t0 = Date.now();
+    const res = await fetch(location.pathname + '?horloge=' + t0, { method: 'HEAD', cache: 'no-store' });
+    const t1 = Date.now();
+    const d = Date.parse(res.headers.get('date') || '');
+    if (!d || t1 - t0 > 3000) return;
+    const off = d + 500 - (t0 + t1) / 2; // l'en-tête est à la seconde près : on vise le milieu
+    CLOCK_OFF = Math.abs(off) > 1500 ? Math.round(off) : 0;
+  } catch { /* pas de correction */ }
+}
+syncClock();
 
 let msgQueue = Promise.resolve();
-function onMessage(topic, payload) {
+function onMessage(topic, payload, relay = 0) {
   msgQueue = msgQueue.then(async () => {
     if (!S.room) return;
     const prefix = NS + S.room.id + '/';
@@ -238,24 +290,45 @@ function onMessage(topic, payload) {
       try { data = await unseal(S.room.key, payload.toString()); } catch { return; }
     }
     switch (kind) {
-      case 'cfg': if (data) onCfg(data); break;
-      case 'p':
-        if (data) S.players[id] = data;
-        else {
+      case 'cfg':
+        if (!data) break;
+        if (S.cfg && data.rev != null && S.cfg.rev != null && (data.rev < S.cfg.rev || (data.rev === S.cfg.rev && data.updatedAt < S.cfg.updatedAt))) {
+          if (isHost() && data.rev < S.cfg.rev) pub('cfg', S.cfg, { retain: true }); // remet à jour un relais revenu avec une vieille version
+          break;
+        }
+        onCfg(data); break;
+      case 'p': {
+        const prev = S.playerT[id];
+        if (data && prev && data.t < prev) break;
+        if (data) S.playerT[id] = data.t;
+        if (data && !data.removed) S.players[id] = data;
+        else if (S.players[id]) {
           delete S.players[id];
           if (id === S.me) { toast('Tu as été retiré de la partie.'); leaveRoom(false); return; }
         }
         break;
-      case 'on':
-        S.online[id] = !!(data && data.on);
+      }
+      case 'on': {
+        const by = S.onlineBy[id] || (S.onlineBy[id] = {});
+        by[relay] = !!(data && data.on);
+        S.online[id] = Object.values(by).some(Boolean);
         if (data && data.bat != null) S.batt[id] = { lvl: data.bat, chg: !!data.chg };
         break;
+      }
       case 'pw':
+        if (data && S.powers[id] && S.powers[id].gameId === data.gameId && data.list.length < S.powers[id].list.length) break;
         if (data) onPowers(id, data); else delete S.powers[id];
         break;
-      case 'pos': if (data) onPos(id, data); else delete S.pos[id]; break;
-      case 'caught': if (data) onCaught(id, data); else onUncaught(id); break;
+      case 'pos': if (data) onPos(id, data); break;
+      case 'caught':
+        if (data && older(S.caught[id], data)) break;
+        if (data && data.cleared) onUncaught(id); else if (data) onCaught(id, data);
+        break;
+      case 'trk': if (data && !older(S.tracks[id], data)) S.tracks[id] = data; break;
+      case 'bal': if (data && !older(S.balises[id], data)) onBalise(+id, data); break;
+      case 'flag': if (data && !older(S.flag, data)) onFlag(data); break;
       case 'pings':
+        if (data && S.pings[id] && S.pings[id].gameId === data.gameId && data.list.length < S.pings[id].list.length) break;
         if (data) {
           S.pings[id] = data;
           if (S.cfg && data.gameId === S.cfg.gameId) {
@@ -270,60 +343,59 @@ function onMessage(topic, payload) {
   });
 }
 
-async function enterRoom({ code, b = null, create = false }) {
-  busy(create ? 'Création de la partie…' : 'Connexion à la partie…');
+async function enterRoom({ code, create = false, solo = null }) {
+  busy(solo ? 'Préparation de la partie d’essai…' : create ? 'Création de la partie…' : 'Connexion à la partie…');
   try {
     S.code = code;
     S.room = await deriveRoom(code);
     S.me = store.get('traque.id.' + code) || randStr(12);
     store.set('traque.id.' + code, S.me);
-    S.cfg = null; S.players = {}; S.online = {}; S.pos = {}; S.caught = {}; S.pings = {};
+    S.cfg = null; S.players = {}; S.playerT = {}; S.online = {}; S.onlineBy = {}; S.pos = {}; S.caught = {}; S.pings = {};
+    S.tracks = {}; S.balises = {}; S.flag = null; S.solo = !!solo;
     resetLog();
 
     const will = { topic: T('on/' + S.me), payload: await seal(S.room.key, { on: false }), qos: 1, retain: true };
-    let client = null, idx = b;
-    if (create) {
-      for (let i = 0; i < BROKERS.length && !client; i++) {
-        try { client = await connectBroker(BROKERS[i], will); idx = i; } catch { /* relais suivant */ }
-      }
-    } else {
-      if (idx == null || !BROKERS[idx]) {
-        busy('Recherche de la partie…');
-        idx = await findRoom();
-        if (idx < 0) throw new Error('Partie introuvable. Vérifie le code et ta connexion.');
-      }
-      client = await connectBroker(BROKERS[idx], will).catch(() => null);
-    }
-    if (!client) throw new Error('Impossible de joindre le serveur de jeu. Réessaie dans un instant.');
+    if (solo) localBroker = new LocalBroker();
+    const urls = solo ? ['local'] : BROKERS;
+    S.clients = urls.map((u) => mkClient(u, will));
+    S.clients.forEach((c, i) => {
+      c.on('message', (t, pl) => onMessage(t, pl, i));
+      c.on('connect', () => { c.subscribe(NS + S.room.id + '/#', { qos: 1 }); pubPresence(true); scheduleRender(); });
+      c.on('close', scheduleRender);
+      c.on('offline', scheduleRender);
+      c.on('error', () => { /* mqtt.js réessaie tout seul */ });
+    });
+    // On attend qu'au moins un relais réponde.
+    const t0 = tnow();
+    while (!connCount() && tnow() - t0 < 9000) await sleep(100);
+    if (!connCount()) throw new Error('Impossible de joindre le serveur de jeu. Vérifie ta connexion et réessaie.');
+    await sleep(150);
 
-    S.client = client; S.b = idx; S.connected = true;
-    client.on('message', onMessage);
-    client.on('connect', () => { S.connected = true; pubPresence(true); scheduleRender(); });
-    client.on('close', () => { S.connected = false; scheduleRender(); });
-    client.on('offline', () => { S.connected = false; scheduleRender(); });
-    await new Promise((res, rej) => client.subscribe(NS + S.room.id + '/#', { qos: 1 }, (err) => (err ? rej(err) : res())));
-
-    await pub('p/' + S.me, { id: S.me, name: S.name, emoji: S.emoji, t: Date.now() }, { retain: true });
+    await pub('p/' + S.me, { id: S.me, name: S.name, emoji: S.emoji, t: tnow() }, { retain: true });
     await pubPresence(true);
 
-    if (create) {
-      S.cfg = { v: 1, host: S.me, status: 'lobby', gameId: randStr(8), rules: { ...DEFAULT_RULES }, roles: { [S.me]: 'H' }, updatedAt: Date.now() };
+    if (create || solo) {
+      S.cfg = { v: 1, rev: 1, host: S.me, status: 'lobby', gameId: randStr(8), rules: { ...DEFAULT_RULES, ...(solo ? solo.rules : {}) }, roles: { [S.me]: solo ? solo.role : 'H' }, updatedAt: tnow() };
       S.gameId = S.cfg.gameId;
       await pub('cfg', S.cfg, { retain: true });
     } else {
-      const t0 = Date.now();
-      while (!S.cfg && Date.now() - t0 < 8000) await sleep(100);
-      if (!S.cfg) throw new Error('Partie introuvable. Vérifie le code.');
+      busy('Recherche de la partie…');
+      const t1 = tnow();
+      while (!S.cfg && tnow() - t1 < 9000) await sleep(100);
+      if (!S.cfg) throw new Error('Partie introuvable. Vérifie le code et ta connexion.');
     }
 
-    store.set('traque.last', { code, b: idx });
-    history.replaceState(null, '', location.pathname + location.search + '#join=' + code + '&b=' + idx);
+    if (!solo) {
+      store.set('traque.last', { code });
+      history.replaceState(null, '', location.pathname + location.search + '#join=' + code);
+    }
     startGeo();
     initBattery();
+    if (solo) startBots(solo.role);
     route();
   } catch (e) {
-    if (S.client) { S.client.end(true); S.client = null; }
-    S.room = null; S.code = null;
+    for (const c of S.clients) { try { c.end(true); } catch { /* déjà fermé */ } }
+    S.clients = []; S.room = null; S.code = null;
     toast(e.message || 'Erreur de connexion');
     show('home');
   } finally {
@@ -333,10 +405,10 @@ async function enterRoom({ code, b = null, create = false }) {
 
 /** Présence (en ligne + batterie). Republiée quand la batterie change d'au moins 5 points. */
 async function pubPresence(force = false) {
-  if (!S.client || !S.room) return;
+  if (!S.clients.length || !S.room) return;
   if (!force && S.lastBatSent != null && S.bat != null && Math.abs(S.bat - S.lastBatSent) < 5 && S.lastChgSent === S.charging) return;
   S.lastBatSent = S.bat; S.lastChgSent = S.charging;
-  await pub('on/' + S.me, { on: true, t: Date.now(), bat: S.bat, chg: S.charging }, { retain: true });
+  await pub('on/' + S.me, { on: true, t: tnow(), bat: S.bat, chg: S.charging }, { retain: true });
 }
 async function initBattery() {
   try {
@@ -356,14 +428,16 @@ function battHtml(id) {
 const avatarOf = (id) => (S.players[id] && S.players[id].emoji) || '';
 
 async function leaveRoom(removeMe = true) {
-  if (S.client) {
+  stopBots();
+  if (S.clients.length) {
     if (removeMe) {
       await pub('on/' + S.me, null, { retain: true });
-      await pub('p/' + S.me, null, { retain: true });
+      await pub('p/' + S.me, { removed: true, t: tnow() }, { retain: true });
     }
-    const c = S.client; S.client = null;
-    setTimeout(() => c.end(), 400);
+    const cs = S.clients; S.clients = [];
+    setTimeout(() => cs.forEach((c) => { try { c.end(); } catch { /* déjà fermé */ } }), 400);
   }
+  if (replay) closeReplay();
   if (S.geoWatch != null) { navigator.geolocation.clearWatch(S.geoWatch); S.geoWatch = null; }
   keepAwake(false);
   store.del('traque.last');
@@ -374,7 +448,7 @@ async function leaveRoom(removeMe = true) {
 }
 
 /* ---------- logique du jeu ---------- */
-function resetLog() { S.log = []; S.logKeys = new Set(); S.logSeen = 0; S.warnedReveal = 0; S.finalSent = false; S.wasOut = false; S.endDismissed = false; S.lastOutcomeKey = null; S.hist = {}; S.nearWarned = false; S.inCircleAlerted = {}; }
+function resetLog() { S.log = []; S.logKeys = new Set(); S.logSeen = 0; S.warnedReveal = 0; S.finalSent = false; S.wasOut = false; S.endDismissed = false; S.lastOutcomeKey = null; S.hist = {}; S.nearWarned = false; S.inCircleAlerted = {}; S.catches = {}; S.track = null; S.trackSent = null; S.bonusSeen = 0; S.movedWarned = false; }
 function addLog(key, t, html, { notify = false } = {}) {
   if (S.logKeys.has(key)) return;
   S.logKeys.add(key);
@@ -384,11 +458,14 @@ function addLog(key, t, html, { notify = false } = {}) {
 }
 const nameOf = (id) => (S.players[id] && S.players[id].name) || 'Quelqu’un';
 const isHost = () => S.cfg && S.cfg.host === S.me;
-function isCaught(id) { const k = S.caught[id]; return !!k && !!S.cfg && k.gameId === S.cfg.gameId && !k.freed; }
+function isCaught(id) { const k = S.caught[id]; return !!k && !!S.cfg && k.gameId === S.cfg.gameId && !k.freed && !k.cleared; }
 function baseRole(id) { return (S.cfg && S.cfg.roles && S.cfg.roles[id]) || (S.cfg && S.cfg.status === 'lobby' ? 'H' : 'S'); }
 function roleOf(id) {
   const r = baseRole(id);
-  if (r === 'F' && isCaught(id)) return S.cfg.rules.caughtBecomesHunter && !S.cfg.rules.prison ? 'H' : 'S';
+  if (r === 'F' && isCaught(id)) {
+    if (S.cfg.rules.mode === 'infection') return 'H';
+    return S.cfg.rules.caughtBecomesHunter && !S.cfg.rules.prison ? 'H' : 'S';
+  }
   return r;
 }
 /** Mode anonyme : les chasseurs ne savent pas quel fugitif est où, les fugitifs ne savent pas quel chasseur fait quoi. */
@@ -402,7 +479,7 @@ const dn = (id) => (anonHidden(id) ? (baseRole(id) === 'F' ? 'un fugitif' : 'un 
 const dnb = (id) => (anonHidden(id) ? dn(id) : `<b>${esc(nameOf(id))}</b>`);
 const fugitives = () => Object.keys(S.cfg.roles || {}).filter((id) => S.cfg.roles[id] === 'F');
 
-function phase(now = Date.now()) {
+function phase(now = tnow()) {
   const c = S.cfg;
   if (!c || c.status === 'lobby') return { name: 'lobby' };
   const r = c.rules, start = c.startAt;
@@ -418,14 +495,19 @@ function phase(now = Date.now()) {
 function outcome() {
   const c = S.cfg;
   if (!c || c.status === 'lobby') return null;
-  if (c.status === 'ended') return { winner: c.winner, reason: c.endReason, at: c.endedAt };
+  if (c.status === 'ended') return { winner: c.winner, reason: c.endReason, at: c.endedAt, by: c.endBy };
   const fug = fugitives();
+  if (c.rules.mode === 'drapeau' && S.flag && S.flag.gameId === c.gameId) return { winner: 'F', reason: 'flag', at: S.flag.t, by: S.flag.by };
   if (fug.length && fug.every(isCaught)) {
     const at = Math.max(...fug.map((id) => S.caught[id].t));
     return { winner: 'H', reason: 'all-caught', at };
   }
+  if (c.rules.mode === 'infection' && fug.length >= 2) {
+    const free = fug.filter((id) => !isCaught(id));
+    if (free.length === 1) return { winner: 'F', reason: 'last', at: Math.max(...fug.filter(isCaught).map((id) => S.caught[id].t)), by: free[0] };
+  }
   const end = c.startAt + c.rules.duration * MIN;
-  if (Date.now() >= end) return { winner: 'F', reason: 'time', at: end };
+  if (tnow() >= end) return { winner: 'F', reason: 'time', at: end };
   return null;
 }
 const pingTimes = () => {
@@ -443,7 +525,7 @@ function onCfg(data) {
     S.gameId = data.gameId;
   }
   if (data.status === 'running' && (!prev || prev.status !== 'running')) {
-    if (prev && Date.now() - data.startAt < 10000) {
+    if (prev && tnow() - data.startAt < 10000) {
       beep('good');
       toast(roleOf(S.me) === 'F' ? '🏃 C’est parti, cours !' : roleOf(S.me) === 'H' ? '🔦 C’est parti ! Reste sur place pendant l’avance.' : 'C’est parti !', 4500);
     }
@@ -461,6 +543,7 @@ function onPos(id, data) {
   let html;
   if (data.kind === 'reveal') html = `📍 ${who} révélée${late}.`;
   else if (data.kind === 'ping') html = `📡 Radar : ${mine ? 'ta position a été révélée' : `${dnb(id)} repéré·e`}.`;
+  else if (data.kind === 'outzone' && data.why === 'moved') html = `🙈 ${mine ? 'Tu as' : `${dnb(id)} a`} quitté ${mine ? 'ta' : 'sa'} cachette, position révélée.`;
   else if (data.kind === 'outzone') html = data.why === 'nogo'
     ? `⛔ ${mine ? 'Tu es' : `${dnb(id)} est`} dans une zone interdite, position révélée.`
     : `🚧 ${mine ? 'Tu es' : `${dnb(id)} est`} hors zone, position révélée.`;
@@ -472,7 +555,7 @@ function onPos(id, data) {
   }
   else if (data.kind === 'final') html = `🏁 ${mine ? 'Ta cachette' : `Cachette de <b>${esc(nameOf(id))}</b>`} dévoilée.`;
   else return;
-  const fresh = Date.now() - data.t < 60000;
+  const fresh = tnow() - data.t < 60000;
   addLog('pos:' + id + ':' + data.t, data.t, html, { notify: true });
   // Historique des positions révélées (pour tracer le parcours)
   const h = S.hist[id] || (S.hist[id] = []);
@@ -488,28 +571,37 @@ function onCaught(id, data) {
   if (!S.cfg || data.gameId !== S.cfg.gameId) return;
   if (data.freed) {
     addLog('freed:' + id + ':' + data.t, data.t, `🔓 <b>${esc(nameOf(id))}</b> a été libéré·e par <b>${esc(nameOf(data.by))}</b> !`, { notify: true });
-    if (Date.now() - data.t < 60000) {
+    if (tnow() - data.t < 60000) {
       beep('good');
       if (id === S.me) { toast('🔓 Tu es libre ! Cours !', 5000); notify('Tu es libre !', `${nameOf(data.by)} t'a libéré·e.`); }
       else if (roleOf(S.me) === 'H') toast(`🔓 ${nameOf(id)} s'est échappé·e de prison !`, 4000);
     }
     return;
   }
+  if (data.by) S.catches[id + ':' + data.t] = data.by;
   const by = data.by ? ` par <b>${esc(nameOf(data.by))}</b>` : '';
   addLog('caught:' + id + ':' + data.t, data.t, `🎯 <b>${esc(nameOf(id))}</b> s'est fait attraper${by} !`, { notify: true });
-  if (Date.now() - data.t < 60000) {
+  if (tnow() - data.t < 60000) {
     beep(id === S.me ? 'alarm' : 'good');
     if (id === S.me) toast(S.cfg.rules.prison ? '🔒 Attrapé·e ! Va à la prison (🔒 sur la carte) et attends qu’on te libère.'
       : S.cfg.rules.caughtBecomesHunter ? 'Attrapé·e ! Tu deviens chasseur 🔦' : 'Attrapé·e ! Tu passes spectateur 👀', 6000);
   }
 }
 function onUncaught(id) {
-  if (S.caught[id] && S.cfg && S.caught[id].gameId === S.cfg.gameId) addLog('uncaught:' + id + ':' + Date.now(), Date.now(), `↩️ Capture de <b>${esc(nameOf(id))}</b> annulée.`);
+  if (S.caught[id] && S.cfg && S.caught[id].gameId === S.cfg.gameId) addLog('uncaught:' + id + ':' + tnow(), tnow(), `↩️ Capture de <b>${esc(nameOf(id))}</b> annulée.`);
   delete S.caught[id];
+}
+/** Équipe pour le chat privé : 'F' (fugitifs, prisonniers compris), 'H' (chasseurs) ou null. */
+function myTeam() {
+  if (!S.cfg || S.cfg.status === 'lobby') return null;
+  if (roleOf(S.me) === 'H') return 'H';
+  return baseRole(S.me) === 'F' ? 'F' : null;
 }
 function onEvent(ev) {
   if (ev.type === 'chat') {
-    addLog('chat:' + ev.from + ':' + ev.t, ev.t, `<span class="chat-from">${esc(nameOf(ev.from))} :</span> ${esc(ev.text)}`, { notify: true });
+    if (ev.team && ev.team !== myTeam()) return;
+    const tag = ev.team ? `<span class="team-tag">${ev.team === 'F' ? '🏃 équipe' : '🔦 équipe'}</span> ` : '';
+    addLog('chat:' + ev.from + ':' + ev.t, ev.t, `${tag}<span class="chat-from">${esc(nameOf(ev.from))} :</span> ${esc(ev.text)}`, { notify: true });
   }
 }
 
@@ -554,7 +646,7 @@ function openGpsHelp() {
 function startGeo() {
   if (S.geoWatch != null || !navigator.geolocation) { if (!navigator.geolocation) S.geoErr = 'unsupported'; return; }
   S.geoWatch = navigator.geolocation.watchPosition((p) => {
-    const c = p.coords, now = Date.now();
+    const c = p.coords, now = tnow();
     const filtered = gpsFilter({ lat: c.latitude, lng: c.longitude, acc: Math.max(3, c.accuracy || 50) }, now);
     if (!filtered) return;
     const here = filtered;
@@ -579,24 +671,25 @@ function startGeo() {
   }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
 }
 function onFix() {
+  recordTrack();
   if (S.screen === 'game') { updateSelfMarker(); dutyTick(); }
   if (S.screen === 'lobby') renderLobbyMap();
   scheduleRender();
 }
 /** Direction de marche (degrés, 0 = nord) ou null si on ne bouge plus depuis une minute. */
 function myHeading() {
-  if (!S.fix || S.fix.heading == null || !S.lastMoveT || Date.now() - S.lastMoveT > 60000) return null;
+  if (!S.fix || S.fix.heading == null || !S.lastMoveT || tnow() - S.lastMoveT > 60000) return null;
   return Math.round(S.fix.heading);
 }
 /** Vitesse en m/s (0 si on ne bouge plus depuis 20 s). */
 function mySpeed() {
-  if (!S.fix || !S.lastMoveT || Date.now() - S.lastMoveT > 20000) return 0;
+  if (!S.fix || !S.lastMoveT || tnow() - S.lastMoveT > 20000) return 0;
   return +(S.fix.spd || 0).toFixed(1);
 }
 const kmh = (ms) => Math.round(ms * 3.6) + ' km/h';
 async function publishPos(kind, extra = {}) {
   if (!S.fix) return false;
-  let p = { lat: +S.fix.lat.toFixed(6), lng: +S.fix.lng.toFixed(6), acc: S.fix.acc, hdg: myHeading(), spd: mySpeed(), fixT: S.fix.t, t: Date.now(), kind, gameId: S.cfg.gameId, ...extra };
+  let p = { lat: +S.fix.lat.toFixed(6), lng: +S.fix.lng.toFixed(6), acc: S.fix.acc, hdg: myHeading(), spd: mySpeed(), fixT: S.fix.t, t: tnow(), kind, gameId: S.cfg.gameId, ...extra };
   if (kind !== 'live' && kind !== 'final' && S.cfg.rules.fuzzy > 0) {
     const circle = fuzzCircle(extra.r || S.cfg.rules.fuzzy);
     p = { ...p, ...circle, acc: undefined };
@@ -637,7 +730,7 @@ function zoneSchedule() {
   return sched;
 }
 /** Zone en vigueur à l'instant t (+ la suivante et les horaires de l'étape en cours). */
-function zoneState(t = Date.now()) {
+function zoneState(t = tnow()) {
   const sc = zoneSchedule();
   if (!sc) return null;
   const { circles, n } = sc;
@@ -677,19 +770,22 @@ function fuzzCircle(r) {
 /** Ce que mon téléphone doit faire en ce moment (envoyer ma position, etc.). */
 let dutyBusy = false;
 async function dutyTick() {
-  if (dutyBusy || !S.cfg || !S.client) return;
+  if (dutyBusy || !S.cfg || !S.clients.length) return;
   dutyBusy = true;
   try {
-    const ph = phase(), now = Date.now(), c = S.cfg, gid = c.gameId;
+    const ph = phase(), now = tnow(), c = S.cfg, gid = c.gameId;
     const role = roleOf(S.me), out = outcome();
 
     if (c.status === 'running' && !out) keepAwake(true); else keepAwake(false);
     if (c.status !== 'lobby') addLog('start:' + gid, c.startAt, `🚦 La partie commence. Les fugitifs ont <b>${minutesLabel(c.rules.headStart)}</b> d'avance.`);
 
+    // Trajet (récap et replay) : enregistré même sans bouger ; partagé à la fin.
+    recordTrack();
+    if (out) await publishTrack();
     // Fin de partie : l'organisateur l'enregistre ; les fugitifs libres dévoilent leur cachette.
     if (c.status === 'running' && out) {
       if (isHost()) {
-        await pubCfg({ status: 'ended', winner: out.winner, endReason: out.reason, endedAt: out.at });
+        await pubCfg({ status: 'ended', winner: out.winner, endReason: out.reason, endedAt: out.at, endBy: out.by || null, ...scoreUpdate(out) });
       }
       if (baseRole(S.me) === 'F' && !isCaught(S.me) && !S.finalSent && S.fix) {
         S.finalSent = true; await publishPos('final');
@@ -765,6 +861,42 @@ async function dutyTick() {
       if (isOut && now - S.lastOutzone > OUTZONE_EVERY) {
         S.lastOutzone = now; await publishPos('outzone', { lvl: 1, why: isOut });
       }
+      // Balises : +1 pouvoir pour le premier fugitif qui y passe
+      if (ph.name === 'hunt' && S.fix) {
+        for (const [i, m] of (c.rules.missions || []).entries()) {
+          const taken = S.balises[i] && S.balises[i].gameId === gid;
+          if (taken || dist(S.fix, m) > 25 + Math.min(S.fix.acc, 15)) continue;
+          const gift = seededRandom(gid + '|balise|' + i)() < 0.5 ? 'jam' : 'counter';
+          const data = { by: S.me, t: now, gameId: gid, gift };
+          await pub('bal/' + i, data, { retain: true });
+          onBalise(i, data);
+        }
+      }
+      // Drapeau : un fugitif qui l'atteint fait gagner les fugitifs
+      if (c.rules.mode === 'drapeau' && c.rules.flag && ph.name === 'hunt' && S.fix && !(S.flag && S.flag.gameId === gid)
+          && dist(S.fix, c.rules.flag) <= 20 + Math.min(S.fix.acc, 15)) {
+        const data = { by: S.me, t: now, gameId: gid };
+        await pub('flag', data, { retain: true });
+        onFlag(data);
+      }
+      // Cache-cache : interdit de quitter sa cachette après l'avance
+      if (c.rules.mode === 'cachecache' && ph.name === 'hunt' && S.fix) {
+        const key = 'traque.hide.' + gid;
+        let spot = store.get(key);
+        if (!spot) { spot = { lat: S.fix.lat, lng: S.fix.lng }; store.set(key, spot); }
+        S.movedOut = dist(S.fix, spot) > 40 + Math.min(S.fix.acc, 30);
+        if (S.movedOut && now - (S.lastMoved || 0) > OUTZONE_EVERY) {
+          S.lastMoved = now; await publishPos('outzone', { lvl: 1, why: 'moved' });
+          if (!S.movedWarned) { S.movedWarned = true; beep('alarm'); }
+        }
+        if (!S.movedOut) S.movedWarned = false;
+      } else S.movedOut = false;
+      // Bonus de survie
+      const nb = survivalBonusCount(S.me);
+      if (ph.name === 'hunt' && nb > (S.bonusSeen || 0)) {
+        S.bonusSeen = nb; beep('good');
+        toast(`⏱️ Bonus de survie : +1 ${nb % 2 ? 'contre-radar 🔍' : 'brouillage 🌫️'} !`, 4500);
+      }
       // Prison : un fugitif libre qui y entre libère tous les prisonniers
       const pr = c.rules.prison;
       if (pr && ph.name === 'hunt' && S.fix && now - (S.lastFree || 0) > 10000 && dist(S.fix, pr) <= pr.r + Math.min(S.fix.acc, 20)) {
@@ -805,7 +937,8 @@ async function dutyTick() {
         }
       }
     } else if (role === 'H') {
-      const every = c.rules.liveEvery * 1000, keep = Math.max(20000, every);
+      const eco = ecoOn();
+      const every = Math.max(c.rules.liveEvery * 1000, eco ? 15000 : 0), keep = eco ? 60000 : Math.max(20000, every);
       if (S.fix && (now - S.lastLive > keep || (S.fix.t > S.lastLive && now - S.lastLive > every))) {
         S.lastLive = now; await publishPos('live');
       }
@@ -843,7 +976,7 @@ document.addEventListener('visibilitychange', () => {
 
 /* ---------- actions ---------- */
 async function pubCfg(patch) {
-  S.cfg = { ...S.cfg, ...patch, updatedAt: Date.now() };
+  S.cfg = { ...S.cfg, ...patch, rev: (S.cfg.rev || 0) + 1, updatedAt: tnow() };
   scheduleRender();
   await pub('cfg', S.cfg, { retain: true });
 }
@@ -856,16 +989,17 @@ async function startGame() {
   const nH = Object.values(roles).filter((r) => r === 'H').length;
   if (!nF || !nH) { toast('Il faut au moins un fugitif et un chasseur.'); return; }
   const r = S.cfg.rules;
+  if (r.mode === 'drapeau' && !r.flag) { toast('🚩 Place d’abord le drapeau sur la carte (bouton « 🚩 Drapeau »).'); return; }
   const ok = await confirmBox('Lancer la partie ?',
     `${nF} fugitif${nF > 1 ? 's' : ''} contre ${nH} chasseur${nH > 1 ? 's' : ''}. ${minutesLabel(r.headStart)} d'avance, révélation toutes les ${minutesLabel(r.interval)}, ${minutesLabel(r.duration)} au total.${r.prison ? ' Prison active : les fugitifs attrapés peuvent être libérés.' : ''}${r.anon ? ' Mode anonyme.' : ''}${r.zone ? (r.shrink > 0 ? ' La zone rétrécit au fil du temps.' : '') : ' Aucune zone de jeu définie.'}${r.fuzzy > 0 ? ` Les fugitifs apparaissent dans un cercle de ${fmtDist(r.fuzzy)}.` : ''}`,
     'C’est parti !');
   if (!ok) return;
-  await pubCfg({ status: 'running', startAt: Date.now(), gameId: randStr(8), roles, winner: null, endReason: null, endedAt: null });
+  await pubCfg({ status: 'running', startAt: tnow(), gameId: randStr(8), roles, winner: null, endReason: null, endedAt: null });
 }
 async function catchSelf() {
   const ok = await confirmBox('Tu t’es fait attraper ?', 'Tout le monde sera prévenu.', 'Oui, attrapé·e', 'fug');
   if (!ok) return;
-  await pub('caught/' + S.me, { by: null, t: Date.now(), gameId: S.cfg.gameId }, { retain: true });
+  await pub('caught/' + S.me, { by: null, t: tnow(), gameId: S.cfg.gameId }, { retain: true });
 }
 async function catchSomeone() {
   const free = fugitives().filter((id) => !isCaught(id));
@@ -874,7 +1008,7 @@ async function catchSomeone() {
     free.map((id) => `<button class="btn" data-pick="${esc(id)}">🏃 ${esc(nameOf(id))}</button>`).join('') + '</div>';
   const id = await ask('J’ai attrapé…', body, [{ label: 'Annuler', value: null, cls: 'ghost' }]);
   if (!id) return;
-  await pub('caught/' + id, { by: S.me, t: Date.now(), gameId: S.cfg.gameId }, { retain: true });
+  await pub('caught/' + id, { by: S.me, t: tnow(), gameId: S.cfg.gameId }, { retain: true });
 }
 async function usePing() {
   const used = pingTimes().length, left = S.cfg.rules.pings - used;
@@ -882,7 +1016,7 @@ async function usePing() {
   const ok = await confirmBox('Lancer un radar ?', `La position de tous les fugitifs sera révélée maintenant. Il en restera ${left - 1} à l'équipe.`, '📡 Lancer');
   if (!ok) return;
   const mine = S.pings[S.me] && S.pings[S.me].gameId === S.cfg.gameId ? S.pings[S.me].list : [];
-  const next = { gameId: S.cfg.gameId, list: [...mine, Date.now()] };
+  const next = { gameId: S.cfg.gameId, list: [...mine, tnow()] };
   S.pings[S.me] = next;
   await pub('pings/' + S.me, next, { retain: true });
   addLog('pinguse:' + S.me + ':' + next.list.at(-1), next.list.at(-1), `📡 <b>${esc(S.name)}</b> lance un radar.`);
@@ -891,10 +1025,26 @@ async function usePing() {
 /* ---------- pouvoirs des fugitifs ---------- */
 const myPowers = (id) => (S.powers[id] && S.cfg && S.powers[id].gameId === S.cfg.gameId ? S.powers[id].list : []);
 const powersUsed = (id, type) => myPowers(id).filter((x) => x.type === type).length;
+/** Nombre de bonus de survie gagnés (un toutes les N minutes passées sans se faire attraper). */
+function survivalBonusCount(id) {
+  const c = S.cfg;
+  if (!c || !c.rules.bonusEvery || c.status === 'lobby' || !c.startAt) return 0;
+  const release = c.startAt + c.rules.headStart * MIN;
+  const until = isCaught(id) ? S.caught[id].t : Math.min(tnow(), c.endedAt || Infinity);
+  return Math.max(0, Math.floor((until - release) / (c.rules.bonusEvery * MIN)));
+}
+function bonusPowers(id, type) {
+  let n = 0;
+  for (const b of Object.values(S.balises)) if (S.cfg && b.gameId === S.cfg.gameId && b.by === id && b.gift === type) n++;
+  const k = survivalBonusCount(id); // en alternance : contre-radar, brouillage, contre-radar…
+  return n + (type === 'counter' ? Math.ceil(k / 2) : Math.floor(k / 2));
+}
+const powersTotal = (id, type) => (type === 'jam' ? S.cfg.rules.jams : S.cfg.rules.counters) + bonusPowers(id, type);
+const powersLeft = (id, type) => powersTotal(id, type) - powersUsed(id, type);
 const jammed = (id, idx) => myPowers(id).some((x) => x.type === 'jam' && x.idx === idx);
 function counterLeft(id) {
   const last = myPowers(id).filter((x) => x.type === 'counter').map((x) => x.t).sort((a, b) => b - a)[0];
-  return last ? Math.max(0, last + COUNTER_MS - Date.now()) : 0;
+  return last ? Math.max(0, last + COUNTER_MS - tnow()) : 0;
 }
 const counterActive = (id) => counterLeft(id) > 0;
 /** Dernier radar lancé (dans la limite autorisée) : { t, by }. */
@@ -911,14 +1061,14 @@ function lastPing() {
 function riposteAvailable() {
   if (!S.cfg || !S.cfg.rules.riposte) return null;
   const lp = lastPing();
-  if (!lp || Date.now() - lp.t > 60000) return null;
+  if (!lp || tnow() - lp.t > 60000) return null;
   if (myPowers(S.me).some((x) => x.type === 'riposte' && x.pingT === lp.t)) return null;
   return lp;
 }
-const riposteOn = (target) => myPowers(S.me).some((x) => x.type === 'riposte' && x.target === target && Date.now() - x.t < COUNTER_MS);
+const riposteOn = (target) => myPowers(S.me).some((x) => x.type === 'riposte' && x.target === target && tnow() - x.t < COUNTER_MS);
 function riposteLeft() {
   const x = myPowers(S.me).filter((y) => y.type === 'riposte').sort((a, b) => b.t - a.t)[0];
-  return x ? { left: Math.max(0, x.t + COUNTER_MS - Date.now()), target: x.target } : { left: 0 };
+  return x ? { left: Math.max(0, x.t + COUNTER_MS - tnow()), target: x.target } : { left: 0 };
 }
 function onPowers(id, data) {
   S.powers[id] = data;
@@ -931,7 +1081,7 @@ function onPowers(id, data) {
       : x.type === 'riposte'
         ? `↩️ ${whoA} ${me ? 'ripostes' : 'riposte'} au radar : ${me ? 'tu vois' : 'il voit'} ${x.target === S.me ? '<b>ta position</b>' : `<b>${esc(nameOf(x.target))}</b>`} pendant 30 s !`
         : `🔍 ${whoA} ${me ? 'lances' : 'lance'} un contre-radar : ${me ? 'tu vois' : 'il voit'} les chasseurs pendant 30 s !`;
-    const fresh = Date.now() - x.t < 30000 && !S.logKeys.has('pw:' + id + ':' + x.t);
+    const fresh = tnow() - x.t < 30000 && !S.logKeys.has('pw:' + id + ':' + x.t);
     addLog('pw:' + id + ':' + x.t, x.t, html, { notify: true });
     if (fresh && !me && roleOf(S.me) === 'H') {
       beep('info');
@@ -944,7 +1094,7 @@ function onPowers(id, data) {
 async function useRiposte() {
   const lp = riposteAvailable();
   if (!lp) return;
-  const entry = { type: 'riposte', t: Date.now(), target: lp.by, pingT: lp.t };
+  const entry = { type: 'riposte', t: tnow(), target: lp.by, pingT: lp.t };
   const data = { gameId: S.cfg.gameId, list: [...myPowers(S.me), entry] };
   S.powers[S.me] = data;
   await pub('pw/' + S.me, data, { retain: true });
@@ -954,13 +1104,13 @@ async function useRiposte() {
 }
 async function usePower(type) {
   const ph = phase(), r = S.cfg.rules;
-  const left = (type === 'jam' ? r.jams : r.counters) - powersUsed(S.me, type);
+  const left = powersLeft(S.me, type); void r;
   if (left <= 0 || ph.name !== 'hunt') return;
   const ok = type === 'jam'
     ? await confirmBox('Brouiller ta prochaine révélation ?', 'Les chasseurs ne recevront pas ta position à la prochaine révélation (ils sauront qu’elle est brouillée). Les radars marchent quand même.', '🌫️ Brouiller')
     : await confirmBox('Lancer un contre-radar ?', 'Tu vois tous les chasseurs sur la carte pendant 30 s. Ils seront prévenus.', '🔍 Lancer');
   if (!ok) return;
-  const entry = { type, t: Date.now() };
+  const entry = { type, t: tnow() };
   if (type === 'jam') entry.idx = ph.k + 1;
   const data = { gameId: S.cfg.gameId, list: [...myPowers(S.me), entry] };
   S.powers[S.me] = data;
@@ -968,6 +1118,120 @@ async function usePower(type) {
   onPowers(S.me, data);
   if (type === 'counter' && gameMap) setTimeout(fitAll, 400);
   scheduleRender();
+}
+
+/* ---------- balises et drapeau ---------- */
+function onBalise(i, data) {
+  S.balises[i] = data;
+  if (!S.cfg || data.gameId !== S.cfg.gameId) return;
+  const gift = data.gift === 'jam' ? 'brouillage 🌫️' : 'contre-radar 🔍';
+  const mine = data.by === S.me;
+  addLog('bal:' + i + ':' + data.gameId, data.t, mine ? `🎁 Tu as pris une balise : +1 ${gift} !` : `🎁 ${dnb(data.by)} a pris une balise (+1 ${gift}).`, { notify: true });
+  if (tnow() - data.t < 30000) {
+    if (mine) { beep('good'); toast(`🎁 Balise prise : +1 ${gift} !`, 4500); }
+    else if (roleOf(S.me) === 'H') toast(`🎁 ${dn(data.by)} a pris une balise`, 3000);
+  }
+  scheduleRender();
+}
+function onFlag(data) {
+  S.flag = data;
+  if (!S.cfg || data.gameId !== S.cfg.gameId) return;
+  addLog('flag:' + data.gameId, data.t, `🚩 <b>${esc(nameOf(data.by))}</b> a capturé le drapeau !`, { notify: true });
+  if (tnow() - data.t < 30000) beep(data.by === S.me ? 'good' : 'alarm');
+  scheduleRender();
+}
+
+/* ---------- classement de la soirée ---------- */
+function scoreUpdate(out) {
+  const c = S.cfg;
+  if (c.scoredGame === c.gameId) return {};
+  const scores = { ...(c.scores || {}) };
+  const add = (id, n) => { if (n) scores[id] = (scores[id] || 0) + n; };
+  const release = c.startAt + c.rules.headStart * MIN, end = out.at || tnow();
+  for (const id of fugitives()) {
+    const k = isCaught(id) ? S.caught[id] : null;
+    add(id, Math.floor(Math.max(0, (k ? k.t : end) - release) / (5 * MIN))); // 1 pt toutes les 5 min de survie
+    if (!k) add(id, 5);                                                       // jamais attrapé
+    if (out.by === id) add(id, 5);                                            // drapeau ou dernier survivant
+  }
+  for (const by of Object.values(S.catches)) add(by, 3);                     // 3 pts par capture
+  if (out.winner === 'H') for (const id of Object.keys(c.roles)) if (c.roles[id] === 'H') add(id, 2);
+  return { scores, scoredGame: c.gameId, games: (c.games || 0) + 1 };
+}
+function renderScores() {
+  const c = S.cfg, sc = c.scores || {};
+  const ids = Object.keys(sc).filter((id) => sc[id] > 0).sort((a, b) => sc[b] - sc[a]);
+  $('#score-card').hidden = !ids.length;
+  if (!ids.length) return;
+  const medal = ['🥇', '🥈', '🥉'];
+  $('#scores').innerHTML = ids.map((id, i) => `<li><span>${medal[i] || (i + 1) + '.'}</span> ${esc(avatarOf(id))} <b>${esc(nameOf(id))}</b><span class="pts">${sc[id]} pt${sc[id] > 1 ? 's' : ''}</span></li>`).join('');
+  $('#scores-hint').textContent = `${c.games || 0} partie${(c.games || 0) > 1 ? 's' : ''} jouée${(c.games || 0) > 1 ? 's' : ''}. Fugitif : 1 pt toutes les 5 min de survie, +5 si jamais attrapé. Chasseur : 3 pts par capture, +2 si victoire.`;
+  $('#btn-score-reset').hidden = !isHost();
+}
+
+/* ---------- trajets : enregistrement, récap, replay ---------- */
+function recordTrack() {
+  const c = S.cfg;
+  if (!c || c.status !== 'running' || !S.fix || outcome()) return;
+  const key = 'traque.trk.' + c.gameId;
+  if (!S.track || S.trackGame !== c.gameId) { S.track = store.get(key) || []; S.trackGame = c.gameId; }
+  const last = S.track[S.track.length - 1], now = tnow();
+  if (last && now - last[0] < 8000 && dist({ lat: last[1], lng: last[2] }, S.fix) < 15) return;
+  S.track.push([now, +S.fix.lat.toFixed(5), +S.fix.lng.toFixed(5)]);
+  if (S.track.length > 1500) S.track.splice(0, S.track.length - 1500);
+  if (now - (S.trackSaved || 0) > 30000) { S.trackSaved = now; store.set(key, S.track); }
+}
+function trackStats(pts) {
+  let d = 0, vmax = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], dt = (b[0] - a[0]) / 1000;
+    if (dt <= 0) continue;
+    const seg = dist({ lat: a[1], lng: a[2] }, { lat: b[1], lng: b[2] }), v = seg / dt;
+    if (v < 12) { d += seg; if (dt >= 5) vmax = Math.max(vmax, v); } // au-delà de 43 km/h : saut de GPS ignoré
+  }
+  return { dist: Math.round(d), vmax: +vmax.toFixed(1) };
+}
+async function publishTrack() {
+  const c = S.cfg;
+  if (!c || S.trackSent === c.gameId) return;
+  S.trackSent = c.gameId;
+  const pts = (S.track && S.trackGame === c.gameId ? S.track : store.get('traque.trk.' + c.gameId)) || [];
+  if (!pts.length) return;
+  const step = Math.ceil(pts.length / 400);
+  const sample = pts.filter((_, i) => i % step === 0 || i === pts.length - 1);
+  const st = trackStats(pts);
+  await pub('trk/' + S.me, {
+    gameId: c.gameId, t: tnow(), role: baseRole(S.me), ...st,
+    pts: sample.map((x) => [Math.round((x[0] - c.startAt) / 1000), Math.round(x[1] * 1e5), Math.round(x[2] * 1e5)]),
+  }, { retain: true });
+}
+const gameTracks = () => Object.entries(S.tracks).filter(([, t]) => S.cfg && t.gameId === S.cfg.gameId);
+function recapHtml(out) {
+  const c = S.cfg, tr = Object.fromEntries(gameTracks());
+  const catches = {};
+  for (const by of Object.values(S.catches)) catches[by] = (catches[by] || 0) + 1;
+  const ids = Object.keys(c.roles);
+  const rows = ids.map((id) => {
+    const t = tr[id], bits = [];
+    if (t) { bits.push(`${fmtDist(t.dist)} parcourus`); if (t.vmax >= 0.5) bits.push(`max ${kmh(t.vmax)}`); }
+    if (c.roles[id] === 'F') {
+      const k = isCaught(id) ? S.caught[id] : null;
+      bits.push(k ? `attrapé·e après ${clock(k.t - c.startAt)}` : 'jamais attrapé·e');
+    }
+    if (catches[id]) bits.push(`${catches[id]} capture${catches[id] > 1 ? 's' : ''}`);
+    return `<li>${c.roles[id] === 'F' ? '🏃' : '🔦'} ${esc(avatarOf(id))} <b>${esc(nameOf(id))}</b> : ${bits.join(' · ') || '—'}</li>`;
+  });
+  const awards = [];
+  const best = (f) => ids.map((id) => [id, f(id)]).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])[0];
+  const h = best((id) => catches[id] || 0);
+  if (h) awards.push(`🏆 Meilleur chasseur : <b>${esc(nameOf(h[0]))}</b> (${h[1]} capture${h[1] > 1 ? 's' : ''})`);
+  const f = best((id) => (c.roles[id] === 'F' ? (isCaught(id) ? S.caught[id].t - c.startAt : (out.at || tnow()) - c.startAt + 1) : 0));
+  if (f) awards.push(`🏃 Meilleur fugitif : <b>${esc(nameOf(f[0]))}</b>`);
+  const m = best((id) => (tr[id] ? tr[id].dist : 0));
+  if (m) awards.push(`👟 Marathonien : <b>${esc(nameOf(m[0]))}</b> (${fmtDist(m[1])})`);
+  const v = best((id) => (tr[id] ? tr[id].vmax : 0));
+  if (v) awards.push(`⚡ Fusée : <b>${esc(nameOf(v[0]))}</b> (${kmh(v[1])})`);
+  return (awards.length ? `<li class="awards">${awards.join('<br>')}</li>` : '') + rows.join('');
 }
 
 /* ---------- notifications ---------- */
@@ -999,7 +1263,7 @@ async function ntfySend(topic, title, msg, at) {
 /** Programme chez ntfy un rappel 1 min avant chaque révélation de la partie (une seule fois). */
 async function scheduleReminders() {
   const n = store.get('traque.ntfy');
-  if (!n || !n.on || !S.cfg || S.cfg.status !== 'running' || isCaught(S.me)) return;
+  if (!n || !n.on || S.solo || !S.cfg || S.cfg.status !== 'running' || isCaught(S.me)) return;
   const key = 'traque.ntfy.done.' + S.cfg.gameId;
   if (store.get(key) || S.remindersBusy) return;
   S.remindersBusy = true; store.set(key, true);
@@ -1008,11 +1272,11 @@ async function scheduleReminders() {
     let count = 0;
     for (let t = release; t < end && count < 40; t += r.interval * MIN) {
       const at = t - 60000;
-      if (at - Date.now() < 20000) continue;
+      if (at - tnow() < 20000) continue;
       await ntfySend(n.topic, '📍 Révélation dans 1 min', 'Ouvre Traque pour envoyer ta position.', at);
       count++;
     }
-    if (count) addLog('ntfy:' + S.cfg.gameId, Date.now(), `🔔 ${count} rappel${count > 1 ? 's' : ''} programmé${count > 1 ? 's' : ''} sur ton téléphone.`);
+    if (count) addLog('ntfy:' + S.cfg.gameId, tnow(), `🔔 ${count} rappel${count > 1 ? 's' : ''} programmé${count > 1 ? 's' : ''} sur ton téléphone.`);
   } catch {
     store.del(key);
     toast('🔔 Impossible de programmer les rappels (ntfy injoignable).');
@@ -1056,7 +1320,7 @@ document.addEventListener('change', (e) => {
 });
 
 async function shareLink() {
-  const url = `${location.origin}${location.pathname}#join=${S.code}&b=${S.b}`;
+  const url = `${location.origin}${location.pathname}#join=${S.code}`;
   const text = `Rejoins ma partie de Traque (code ${S.code})`;
   try {
     if (navigator.share) { await navigator.share({ title: 'Traque', text, url }); return; }
@@ -1130,17 +1394,25 @@ function drawExtras(map, group, rules) {
   if (group) group.remove();
   const g = L.layerGroup();
   for (const n of rules.nogo || []) {
-    L.circle([n.lat, n.lng], { radius: n.r, color: '#c92a2a', weight: 3, dashArray: '6 5', fillColor: '#e03131', fillOpacity: 0.28, interactive: false }).addTo(g);
-    L.marker([n.lat, n.lng], { interactive: false, icon: L.divIcon({ className: 'pm', html: '<div class="spot">⛔</div>', iconSize: [0, 0] }) }).addTo(g);
+    L.circle([n.lat, n.lng], { radius: n.r, color: '#c92a2a', weight: 3, dashArray: '6 5', fillColor: '#e03131', fillOpacity: 0.28, interactive: false, className: 'zp' }).addTo(g);
+    L.marker([n.lat, n.lng], { interactive: false, icon: L.divIcon({ className: 'pm keep', html: '<div class="spot">⛔</div>', iconSize: [0, 0] }) }).addTo(g);
+  }
+  for (const [i, m] of (rules.missions || []).entries()) {
+    const taken = S.balises[i] && S.cfg && S.balises[i].gameId === S.cfg.gameId && S.cfg.status !== 'lobby';
+    L.marker([m.lat, m.lng], { interactive: false, icon: L.divIcon({ className: 'pm keep', html: `<div class="spot ${taken ? 'taken' : ''}">${taken ? '✅' : '🎁'}</div>`, iconSize: [0, 0] }) }).addTo(g);
+  }
+  if (rules.flag && rules.mode === 'drapeau') {
+    L.circle([rules.flag.lat, rules.flag.lng], { radius: 20, color: '#2f9e44', weight: 3, fillOpacity: 0.2, interactive: false, className: 'zp' }).addTo(g);
+    L.marker([rules.flag.lat, rules.flag.lng], { interactive: false, icon: L.divIcon({ className: 'pm keep', html: '<div class="spot">🚩</div><div class="pin-label">Drapeau</div>', iconSize: [0, 0] }) }).addTo(g);
   }
   if (rules.prison) {
     const pr = rules.prison;
-    L.circle([pr.lat, pr.lng], { radius: pr.r, color: '#212529', weight: 3, dashArray: '4 4', fillColor: '#495057', fillOpacity: 0.3, interactive: false }).addTo(g);
-    L.marker([pr.lat, pr.lng], { interactive: false, icon: L.divIcon({ className: 'pm', html: '<div class="spot">🔒</div><div class="pin-label">Prison</div>', iconSize: [0, 0] }) }).addTo(g);
+    L.circle([pr.lat, pr.lng], { radius: pr.r, color: '#212529', weight: 3, dashArray: '4 4', fillColor: '#495057', fillOpacity: 0.3, interactive: false, className: 'zp' }).addTo(g);
+    L.marker([pr.lat, pr.lng], { interactive: false, icon: L.divIcon({ className: 'pm keep', html: '<div class="spot">🔒</div><div class="pin-label">Prison</div>', iconSize: [0, 0] }) }).addTo(g);
   }
   return g.addTo(map);
 }
-const extrasKey = (r) => JSON.stringify([r.prison, r.nogo]);
+const extrasKey = (r) => JSON.stringify([r.prison, r.nogo, r.missions, r.mode === 'drapeau' && r.flag, Object.keys(S.balises).filter((i) => S.cfg && S.balises[i].gameId === S.cfg.gameId)]);
 let lobbyExtras = null, lobbyExtrasKey = '', gameExtras = null, gameExtrasKey = '';
 const zoneColor = () => ZONE_COLORS[(S.cfg && S.cfg.rules.zoneColor) || 'orange'] || ZONE_COLORS.orange;
 function drawZone(map, group, z) {
@@ -1149,9 +1421,9 @@ function drawZone(map, group, z) {
   const ring = circlePts(z);
   const world = [[-89, -540], [89, -540], [89, 540], [-89, 540]];
   const g = L.layerGroup([
-    L.polygon([world, ring], { stroke: false, fillColor: '#10121a', fillOpacity: 0.32, interactive: false, smoothFactor: 0 }),
-    L.circle([z.lat, z.lng], { radius: z.r, color: '#ffffff', weight: 10, opacity: 0.95, fill: false, interactive: false }),
-    L.circle([z.lat, z.lng], { radius: z.r, color: zoneColor(), weight: 5, opacity: 1, fill: false, interactive: false }),
+    L.polygon([world, ring], { stroke: false, fillColor: '#10121a', fillOpacity: 0.32, interactive: false, smoothFactor: 0, className: 'zp' }),
+    L.circle([z.lat, z.lng], { radius: z.r, color: '#ffffff', weight: 10, opacity: 0.95, fill: false, interactive: false, className: 'zp' }),
+    L.circle([z.lat, z.lng], { radius: z.r, color: zoneColor(), weight: 5, opacity: 1, fill: false, interactive: false, className: 'zp' }),
   ]).addTo(map);
   g.bounds = L.latLng(z.lat, z.lng).toBounds(z.r * 2);
   return g;
@@ -1183,6 +1455,15 @@ function ensureLobbyMap() {
     if (!isHost()) return;
     const pt = { lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6) };
     if (S.mapMode === 'prison') { pubRules({ prison: { ...pt, r: PRISON_R } }); return; }
+    if (S.mapMode === 'flag') { pubRules({ flag: pt, mode: 'drapeau' }); return; }
+    if (S.mapMode === 'mission') {
+      const list = S.cfg.rules.missions || [];
+      const hit = list.findIndex((m) => dist(m, pt) <= 40);
+      if (hit >= 0) pubRules({ missions: list.filter((_, i) => i !== hit) });
+      else if (list.length >= 10) toast('10 balises au maximum.');
+      else pubRules({ missions: [...list, pt] });
+      return;
+    }
     if (S.mapMode === 'nogo') {
       const list = S.cfg.rules.nogo || [];
       const hit = list.findIndex((n) => dist(n, pt) <= n.r);
@@ -1281,7 +1562,7 @@ function renderGameMap() {
     if (!p) continue;
     seen.add(id);
     const role = p.kind === 'live' ? 'H' : 'F';
-    const age = Date.now() - p.t;
+    const age = tnow() - p.t;
     const old = p.kind === 'live' ? age > 90000 : false;
     const label = esc(anonHidden(id) ? '❓ ' + (role === 'F' ? 'Fugitif' : 'Chasseur') : nameOf(id)) + (p.kind === 'live' ? '' : ' · ' + (age < 45000 ? 'maintenant' : ago(p.t).replace('il y a ', ''))) + (p.r ? ` · cercle n°${p.lvl || 1} ≈${fmtDist(p.r)}` : '');
     const html = `${old ? '' : headingHtml(p.hdg, role)}<div class="pin ${role} ${old ? 'old' : ''} ${p.r ? 'fuzzy' : ''}">${anonHidden(id) ? '?' : esc(avatarOf(id) || nameOf(id).slice(0, 1).toUpperCase())}</div><div class="pin-label">${label}</div>`;
@@ -1329,8 +1610,10 @@ function render() {
   const gq = gpsQuality();
   for (const id of ['#gps-lobby', '#gps-game']) { const el = $(id); if (el.textContent !== gq.txt) el.textContent = gq.txt; el.className = 'gps ' + gq.cls; }
   for (const id of ['#conn-lobby', '#conn-game']) {
-    $(id).classList.toggle('ok', S.connected);
-    $(id).title = S.connected ? 'Connecté' : 'Reconnexion…';
+    const n = connCount(), tot = S.clients.length;
+    $(id).classList.toggle('ok', n === tot && n > 0);
+    $(id).classList.toggle('part', n > 0 && n < tot);
+    $(id).title = S.solo ? 'Partie d’essai (hors ligne)' : n ? `Connecté à ${n} relais sur ${tot}` : 'Reconnexion…';
   }
   if (S.screen === 'lobby') renderLobby();
   if (S.screen === 'game') renderGame();
@@ -1343,7 +1626,8 @@ function sortedPlayers() {
 
 function renderLobby() {
   const c = S.cfg, host = isHost(), ids = sortedPlayers();
-  $('#lobby-code').textContent = S.code;
+  $('#lobby-code').textContent = S.solo ? '🤖 ESSAI' : S.code;
+  $('.code-actions').hidden = S.solo;
   $('#lobby-count').textContent = `(${ids.length})`;
   $('#lobby-players').innerHTML = ids.map((id) => {
     const role = baseRole(id);
@@ -1388,7 +1672,7 @@ function renderLobby() {
   $('#zone-r-val').textContent = fmtDist(z ? z.r : +rr.value);
   $('#btn-zone-clear').hidden = !z;
   const r0 = c.rules;
-  const extra = [r0.prison ? '🔒 Prison placée.' : '', (r0.nogo || []).length ? `⛔ ${r0.nogo.length} zone${r0.nogo.length > 1 ? 's' : ''} interdite${r0.nogo.length > 1 ? 's' : ''}.` : ''].filter(Boolean).join(' ');
+  const extra = [r0.prison ? '🔒 Prison placée.' : '', (r0.missions || []).length ? `🎁 ${r0.missions.length} balise${r0.missions.length > 1 ? 's' : ''}.` : '', r0.mode === 'drapeau' ? (r0.flag ? '🚩 Drapeau placé.' : '🚩 Drapeau à placer !') : '', (r0.nogo || []).length ? `⛔ ${r0.nogo.length} zone${r0.nogo.length > 1 ? 's' : ''} interdite${r0.nogo.length > 1 ? 's' : ''}.` : ''].filter(Boolean).join(' ');
   if (extra) $('#zone-hint').textContent += ' ' + extra;
   $('#map-mode').hidden = !host; $('#zone-extra').hidden = !host; $('#zone-saved-box').hidden = !host;
   $('#map-mode-hint').hidden = !host;
@@ -1396,11 +1680,17 @@ function renderLobby() {
     zone: 'Touche la carte pour placer le centre de la zone.',
     prison: `Touche la carte pour placer la prison (cercle de ${PRISON_R} m). Un fugitif attrapé y va ; un fugitif libre qui y entre libère tout le monde.`,
     nogo: 'Touche la carte pour ajouter une zone interdite ; touche-en une pour l’enlever. Y entrer révèle la position comme une sortie de zone.',
+    mission: 'Touche la carte pour poser une balise 🎁 (touche-la à nouveau pour l’enlever). Le premier fugitif qui y passe gagne un pouvoir.',
+    flag: 'Touche la carte pour placer le drapeau 🚩 (passe le mode de jeu en « Capture du drapeau »).',
   }[S.mapMode || 'zone'];
   for (const b of document.querySelectorAll('#map-mode [data-mode]')) b.setAttribute('aria-checked', String(b.dataset.mode === (S.mapMode || 'zone')));
   $('#nogo-r-box').hidden = (S.mapMode || 'zone') !== 'nogo';
   $('#btn-prison-clear').hidden = !r0.prison;
   $('#btn-nogo-clear').hidden = !(r0.nogo || []).length;
+  $('#btn-missions-clear').hidden = !(r0.missions || []).length;
+  $('#btn-flag-clear').hidden = !r0.flag;
+  $('#mode-hint').textContent = MODE_HINT[r0.mode] || '';
+  renderScores();
   renderSavedZones();
   renderLobbyMap();
 
@@ -1415,7 +1705,7 @@ function renderLobby() {
 }
 
 function renderGame() {
-  const c = S.cfg, ph = phase(), out = outcome(), role = roleOf(S.me), now = Date.now();
+  const c = S.cfg, ph = phase(), out = outcome(), role = roleOf(S.me), now = tnow();
   renderHud(ph, out, role, now);
 
   // Bandeau
@@ -1424,6 +1714,7 @@ function renderGame() {
   if (!out && c.status === 'running') {
     if (S.geoErr === 'denied') bannerText = '📍 Localisation refusée : autorise-la pour cette page, sinon personne ne te verra.';
     else if (S.geoErr) bannerText = '📍 Position introuvable pour l’instant…';
+    else if (role === 'F' && S.movedOut) bannerText = '🙈 Tu as quitté ta cachette ! Ta position est révélée.';
     else if (outOfZone() === 'nogo') bannerText = role === 'F' ? '⛔ Zone interdite ! Sors-en, ta position est révélée.' : '⛔ Tu es dans une zone interdite !';
     else if (outOfZone()) bannerText = role === 'F' ? '🚧 Tu es hors zone ! Ta position est révélée.' : '🚧 Tu es hors zone !';
     else if (baseRole(S.me) === 'F' && isCaught(S.me) && c.rules.prison) {
@@ -1431,7 +1722,7 @@ function renderGame() {
       bannerText = d != null && d <= c.rules.prison.r + 15 ? '🔒 Tu es en prison. Attends qu’un fugitif vienne te libérer.' : `🔒 Va à la prison${d != null ? ` (à ${fmtDist(d)})` : ''} et attends qu’on te libère.`;
       bannerInfo = true;
     }
-    else if (!S.connected) { bannerText = 'Connexion perdue, reconnexion…'; bannerInfo = true; }
+    else if (!connCount()) { bannerText = 'Connexion perdue, reconnexion…'; bannerInfo = true; }
     else if (role === 'F' && counterActive(S.me)) { bannerText = `🔍 Contre-radar : tu vois les chasseurs encore ${Math.ceil(counterLeft(S.me) / 1000)} s`; bannerInfo = true; }
     else if (role === 'F' && riposteLeft().left > 0) { const rl = riposteLeft(); bannerText = `↩️ Riposte : tu vois ${dn(rl.target)} encore ${Math.ceil(rl.left / 1000)} s`; bannerInfo = true; }
   }
@@ -1443,9 +1734,9 @@ function renderGame() {
   if (!out && c.status === 'running') {
     if (role === 'F') {
       const hunting = ph.name === 'hunt';
-      const jl = c.rules.jams - powersUsed(S.me, 'jam'), cl = c.rules.counters - powersUsed(S.me, 'counter');
-      if (c.rules.jams > 0) acts += `<button class="btn" data-act="jam" ${jl > 0 && hunting && ph.nextReveal ? '' : 'disabled'}>🌫️ Brouillage (${jl})</button>`;
-      if (c.rules.counters > 0) acts += `<button class="btn" data-act="counter" ${cl > 0 && hunting && !counterActive(S.me) ? '' : 'disabled'}>🔍 Contre-radar (${cl})</button>`;
+      const jl = powersLeft(S.me, 'jam'), cl = powersLeft(S.me, 'counter');
+      if (powersTotal(S.me, 'jam') > 0) acts += `<button class="btn" data-act="jam" ${jl > 0 && hunting && ph.nextReveal ? '' : 'disabled'}>🌫️ Brouillage (${jl})</button>`;
+      if (powersTotal(S.me, 'counter') > 0) acts += `<button class="btn" data-act="counter" ${cl > 0 && hunting && !counterActive(S.me) ? '' : 'disabled'}>🔍 Contre-radar (${cl})</button>`;
       if (riposteAvailable()) acts = `<button class="btn primary" data-act="riposte">↩️ Riposte : voir qui t'a radaré</button>` + acts;
       acts += '<button class="btn fug" data-act="caught-self">Je me suis fait attraper</button>';
     }
@@ -1504,7 +1795,10 @@ function renderGame() {
       ? '<button class="btn small" data-act="lobby">Retour au salon</button>'
       : '<button class="btn small danger" data-act="end">Terminer la partie</button>';
   } else if (!S.online[c.host]) tools = '<button class="btn small ghost" data-act="become-host">L’organisateur est hors ligne : prendre le relais</button>';
-  tools += '<button class="btn small ghost" data-act="reminders">🔔 Rappels</button><button class="btn small ghost" data-act="leave">Quitter</button>';
+  tools += `<button class="btn small ghost" data-act="alert">${ALERT_LABEL[store.get('traque.alert') || 'auto']}</button>`
+    + `<button class="btn small ghost" data-act="eco">${ecoOn() ? '🔋 Éco : oui' : '🔋 Éco : non'}</button>`
+    + (S.solo ? '' : '<button class="btn small ghost" data-act="reminders">⏰ Rappels</button>')
+    + '<button class="btn small ghost" data-act="leave">Quitter</button>';
   const ht = $('#host-tools');
   if (ht.dataset.html !== tools) { ht.dataset.html = tools; ht.innerHTML = tools; }
 
@@ -1575,7 +1869,9 @@ function renderEnd(out) {
   const key = S.cfg.gameId + ':' + out.winner;
   if (S.lastOutcomeKey !== key) {
     S.lastOutcomeKey = key; S.endDismissed = false;
-    addLog('end:' + S.cfg.gameId, out.at || Date.now(), out.winner === 'F' ? '🏁 Temps écoulé : victoire des fugitifs !' : '🏁 Victoire des chasseurs !');
+    addLog('end:' + S.cfg.gameId, out.at || tnow(), out.reason === 'flag' ? '🏁 Drapeau capturé : victoire des fugitifs !'
+      : out.reason === 'last' ? `🏁 ${esc(nameOf(out.by))} est le dernier survivant !`
+        : out.winner === 'F' ? '🏁 Victoire des fugitifs !' : '🏁 Victoire des chasseurs !');
     beep('good');
   }
   el.hidden = S.endDismissed;
@@ -1585,13 +1881,13 @@ function renderEnd(out) {
   $('#end-title').textContent = out.winner === 'F' ? 'Les fugitifs gagnent !' : 'Les chasseurs gagnent !';
   $('#end-reason').textContent = out.reason === 'time' ? 'Le temps est écoulé.'
     : out.reason === 'all-caught' ? 'Tous les fugitifs ont été attrapés.'
-      : out.reason === 'host' ? 'Partie arrêtée par l’organisateur.' : '';
-  $('#end-recap').innerHTML = fugitives().map((id) => {
-    const k = isCaught(id) ? S.caught[id] : null;
-    const txt = k ? `attrapé·e${k.by ? ' par ' + esc(nameOf(k.by)) : ''} après ${clock(k.t - c.startAt)}` : 'jamais attrapé·e 🏆';
-    return `<li>🏃 <b>${esc(nameOf(id))}</b> : ${txt}</li>`;
-  }).join('');
-  const acts = '<button class="btn" data-act="see-map">Voir la carte</button>' +
+      : out.reason === 'host' ? 'Partie arrêtée par l’organisateur.'
+        : out.reason === 'flag' ? `🚩 ${nameOf(out.by)} a capturé le drapeau !`
+          : out.reason === 'last' ? `🦠 ${nameOf(out.by)} est le dernier survivant !` : '';
+  const recap = recapHtml(out);
+  if ($('#end-recap').dataset.html !== recap) { $('#end-recap').dataset.html = recap; $('#end-recap').innerHTML = recap; }
+  const acts = (gameTracks().length ? '<button class="btn primary" data-act="replay">▶️ Revoir la partie</button>' : '') +
+    '<button class="btn" data-act="see-map">Voir la carte</button>' +
     (isHost() ? '<button class="btn primary" data-act="lobby">Rejouer (retour au salon)</button>' : `<p class="hint">${esc(nameOf(c.host))} peut relancer une partie.</p>`);
   const ea = $('#end-actions');
   if (ea.dataset.html !== acts) { ea.dataset.html = acts; ea.innerHTML = acts; }
@@ -1635,13 +1931,13 @@ $('#btn-join').onclick = () => {
   const code = $('#code').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (code.length !== 6) { toast('Le code fait 6 caractères.'); return; }
   const h = parseHash();
-  enterRoom({ code, b: h.code === code ? h.b : null });
+  enterRoom({ code });
 };
 $('#code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-join').click(); });
 $('#btn-resume').onclick = () => {
   if (!needName()) return;
   const last = store.get('traque.last');
-  if (last) enterRoom({ code: last.code, b: last.b });
+  if (last) enterRoom({ code: last.code });
 };
 
 $('#btn-leave').onclick = async () => { if (await confirmBox('Quitter le salon ?', '', 'Quitter', 'danger')) leaveRoom(); };
@@ -1650,7 +1946,7 @@ $('#btn-qr').onclick = () => {
   const box = $('#qr');
   if (!box.hidden) { box.hidden = true; return; }
   const qr = qrcode(0, 'M');
-  qr.addData(`${location.origin}${location.pathname}#join=${S.code}&b=${S.b}`);
+  qr.addData(`${location.origin}${location.pathname}#join=${S.code}`);
   qr.make();
   box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
   box.hidden = false;
@@ -1669,7 +1965,7 @@ $('#lobby-players').addEventListener('click', async (e) => {
     if (!(await confirmBox(`Retirer ${nameOf(id)} ?`, 'Utile pour un joueur parti ou en double.', 'Retirer', 'danger'))) return;
     const roles = { ...S.cfg.roles }; delete roles[id];
     await pubCfg({ roles });
-    await pub('p/' + id, null, { retain: true });
+    await pub('p/' + id, { removed: true, t: tnow() }, { retain: true });
     await pub('on/' + id, null, { retain: true });
   }
 });
@@ -1710,6 +2006,16 @@ $('#map-mode').addEventListener('click', (e) => {
 });
 $('#btn-prison-clear').onclick = () => pubRules({ prison: null });
 $('#btn-nogo-clear').onclick = () => pubRules({ nogo: [] });
+$('#btn-missions-clear').onclick = () => pubRules({ missions: [] });
+$('#btn-flag-clear').onclick = () => pubRules({ flag: null });
+$('#btn-score-reset').onclick = async () => { if (await confirmBox('Remettre le classement à zéro ?', '', 'Remettre à zéro', 'danger')) pubCfg({ scores: {}, games: 0 }); };
+S.chatScope = 'all';
+$('#chat-scope').onclick = () => {
+  if (!myTeam()) { toast('Pas d’équipe pour l’instant : message à tout le monde.'); return; }
+  S.chatScope = S.chatScope === 'all' ? 'team' : 'all';
+  $('#chat-scope').textContent = S.chatScope === 'team' ? '🔒 Équipe' : '👥 Tous';
+  $('#chat-input').placeholder = S.chatScope === 'team' ? 'Message à ton équipe…' : 'Message à tout le monde…';
+};
 
 /* Zones enregistrées : partagées avec le groupe (dans la partie) et gardées sur ce téléphone. */
 function savedZones() {
@@ -1758,6 +2064,18 @@ document.addEventListener('click', async (e) => {
     else if (act === 'jam') usePower('jam');
     else if (act === 'counter') usePower('counter');
     else if (act === 'riposte') useRiposte();
+    else if (act === 'replay') openReplay();
+    else if (act === 'alert') {
+      const order = ['auto', 'sound', 'vibrate', 'silent'];
+      const next = order[(order.indexOf(store.get('traque.alert') || 'auto') + 1) % order.length];
+      store.set('traque.alert', next);
+      toast({ auto: '🔔 Auto : vibreur seul quand tu es fugitif, son sinon', sound: '🔊 Son + vibreur', vibrate: '📳 Vibreur seul', silent: '🔕 Aucune alerte' }[next], 3000);
+      scheduleRender();
+    } else if (act === 'eco') {
+      store.set('traque.eco', !(store.get('traque.eco') === true));
+      toast(store.get('traque.eco') ? '🔋 Économie de batterie : chasseurs mis à jour toutes les 15 s, carte rafraîchie moins souvent' : 'Économie de batterie désactivée', 3500);
+      scheduleRender();
+    }
     else if (act === 'gps') openGpsHelp();
     else if (act === 'reminders') openReminders();
     else if (act === 'see-map') { S.endDismissed = true; scheduleRender(); }
@@ -1766,14 +2084,14 @@ document.addEventListener('click', async (e) => {
     else if (act === 'become-host') { if (await confirmBox('Prendre le relais ?', 'Tu pourras terminer la partie et en relancer une.', 'Oui')) pubCfg({ host: S.me }); }
     else if (act === 'end') {
       if (await confirmBox('Terminer la partie ?', 'Les fugitifs encore en fuite gagnent.', 'Terminer', 'danger')) {
-        pubCfg({ status: 'ended', winner: 'F', endReason: 'host', endedAt: Date.now() });
+        pubCfg({ status: 'ended', winner: 'F', endReason: 'host', endedAt: tnow() });
       }
     }
     return;
   }
   const u = e.target.closest('[data-uncatch]');
   if (u && isHost()) {
-    if (await confirmBox(`Annuler la capture de ${nameOf(u.dataset.uncatch)} ?`, '', 'Annuler la capture')) pub('caught/' + u.dataset.uncatch, null, { retain: true });
+    if (await confirmBox(`Annuler la capture de ${nameOf(u.dataset.uncatch)} ?`, '', 'Annuler la capture')) pub('caught/' + u.dataset.uncatch, { cleared: true, t: tnow(), gameId: S.cfg.gameId }, { retain: true });
     return;
   }
   const f = e.target.closest('[data-focus]');
@@ -1818,9 +2136,244 @@ $('#chat').addEventListener('submit', async (e) => {
   const text = $('#chat-input').value.trim().slice(0, 200);
   if (!text) return;
   $('#chat-input').value = '';
-  const ev = { type: 'chat', from: S.me, text, t: Date.now() };
+  const team = S.chatScope === 'team' ? myTeam() : null;
+  const ev = { type: 'chat', from: S.me, text, t: tnow(), team };
   await pub('ev', ev);
 });
+
+/* ---------- replay de la partie ---------- */
+let replay = null;
+function posAt(track, T) {
+  const p = track.pts;
+  if (!p.length || T < p[0][0]) return null;
+  for (let i = p.length - 1; i >= 0; i--) {
+    if (p[i][0] <= T) {
+      const a = p[i], b = p[i + 1];
+      if (!b) return [a[1], a[2]];
+      const k = (T - a[0]) / (b[0] - a[0] || 1);
+      return [a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+    }
+  }
+  return null;
+}
+function openReplay() {
+  const c = S.cfg, list = gameTracks();
+  if (!list.length || !gameMap) return;
+  const tracks = list.map(([id, t]) => ({ id, role: t.role || baseRole(id), pts: t.pts.map(([sec, a, b]) => [c.startAt + sec * 1000, a / 1e5, b / 1e5]) })).filter((t) => t.pts.length);
+  if (!tracks.length) return;
+  const t0 = c.startAt, t1 = Math.max(c.endedAt || 0, ...tracks.map((t) => t.pts[t.pts.length - 1][0]));
+  const layer = L.layerGroup().addTo(gameMap);
+  for (const t of tracks) {
+    const col = t.role === 'F' ? '#e03131' : '#1c7ed6';
+    t.line = L.polyline([], { color: col, weight: 4, opacity: 0.85, className: 'rp', interactive: false }).addTo(layer);
+    t.marker = L.marker([t.pts[0][1], t.pts[0][2]], { interactive: false, zIndexOffset: 800, icon: L.divIcon({ className: 'pm rp', html: `<div class="pin ${t.role}">${esc(avatarOf(t.id) || nameOf(t.id).slice(0, 1).toUpperCase())}</div><div class="pin-label">${esc(nameOf(t.id))}</div>`, iconSize: [0, 0] }) });
+  }
+  const catches = Object.entries(S.catches).map(([k, by]) => { const i = k.lastIndexOf(':'); return { id: k.slice(0, i), by, t: +k.slice(i + 1) }; });
+  replay = { tracks, t0, t1, T: t0, playing: true, speed: 60, layer, catches, shown: new Map(), last: performance.now() };
+  const all = tracks.flatMap((t) => t.pts.map((x) => [x[1], x[2]]));
+  gameMap.fitBounds(L.latLngBounds(all), { padding: [30, 30], paddingTopLeft: [20, $('#hud').getBoundingClientRect().bottom + 10], maxZoom: 17 });
+  document.body.classList.add('replay');
+  S.endDismissed = true; $('#end').hidden = true; $('#replay-bar').hidden = false;
+  rpUpdate();
+  requestAnimationFrame(rpLoop);
+}
+function rpUpdate() {
+  const r = replay;
+  if (!r) return;
+  for (const t of r.tracks) {
+    const pts = t.pts.filter((x) => x[0] <= r.T).map((x) => [x[1], x[2]]);
+    const cur = posAt(t, r.T);
+    if (cur) pts.push(cur);
+    t.line.setLatLngs(pts);
+    if (cur) { t.marker.setLatLng(cur); if (!r.layer.hasLayer(t.marker)) t.marker.addTo(r.layer); } else t.marker.remove();
+  }
+  for (const k of r.catches) {
+    const key = k.id + ':' + k.t;
+    if (k.t <= r.T && !r.shown.has(key)) {
+      const tr = r.tracks.find((t) => t.id === k.id) || r.tracks.find((t) => t.id === k.by);
+      const at = tr && posAt(tr, k.t);
+      if (at) r.shown.set(key, L.marker(at, { interactive: false, icon: L.divIcon({ className: 'pm rp', html: '<div class="spot">🎯</div>', iconSize: [0, 0] }) }).addTo(r.layer));
+    } else if (k.t > r.T && r.shown.has(key)) { r.shown.get(key).remove(); r.shown.delete(key); }
+  }
+  $('#rp-range').value = Math.round(((r.T - r.t0) / Math.max(1, r.t1 - r.t0)) * 1000);
+  $('#rp-time').textContent = clock(r.T - r.t0);
+  $('#rp-play').textContent = r.playing ? '⏸' : '▶️';
+}
+function rpLoop(ts) {
+  if (!replay) return;
+  const dt = ts - replay.last; replay.last = ts;
+  if (replay.playing) {
+    replay.T = Math.min(replay.t1, replay.T + dt * replay.speed);
+    if (replay.T >= replay.t1) replay.playing = false;
+    rpUpdate();
+  }
+  requestAnimationFrame(rpLoop);
+}
+function closeReplay() {
+  if (!replay) return;
+  replay.layer.remove(); replay = null;
+  document.body.classList.remove('replay');
+  $('#replay-bar').hidden = true;
+  S.endDismissed = false;
+  scheduleRender();
+}
+$('#rp-play').onclick = () => {
+  if (!replay) return;
+  if (replay.T >= replay.t1) replay.T = replay.t0;
+  replay.playing = !replay.playing; replay.last = performance.now(); rpUpdate();
+};
+$('#rp-range').addEventListener('input', (e) => {
+  if (!replay) return;
+  replay.T = replay.t0 + (+e.target.value / 1000) * (replay.t1 - replay.t0);
+  replay.playing = false; rpUpdate();
+});
+$('#rp-speed').onclick = () => {
+  if (!replay) return;
+  const sp = [30, 60, 120, 300];
+  replay.speed = sp[(sp.indexOf(replay.speed) + 1) % sp.length];
+  $('#rp-speed').textContent = '×' + replay.speed;
+};
+$('#rp-close').onclick = closeReplay;
+
+/* ---------- partie d'essai : robots ----------
+ * Tout se passe dans le téléphone (relais local en mémoire). Les robots parlent le même « langage »
+ * que de vrais joueurs : messages chiffrés, révélations, radars, cercles, captures. */
+let bots = [], botTimer = null;
+const BOT_DEFS = {
+  F: [['Robot Rex', '🤖', 'H'], ['Robot Mia', '👾', 'H'], ['Robot Zed', '🦾', 'F']],
+  H: [['Robot Zed', '🦾', 'F'], ['Robot Lou', '🛸', 'F'], ['Robot Rex', '🤖', 'H']],
+};
+async function botPub(b, sub, obj, retain = false) {
+  b.c.publish(T(sub), await seal(S.room.key, obj), { retain, qos: 1 });
+}
+function randomIn(z) { return destination(z, Math.sqrt(Math.random()) * z.r * 0.85, Math.random() * 2 * Math.PI); }
+function botStep(b, target, speed) {
+  const d = dist(b.pos, target);
+  if (d < 1) return;
+  b.hdg = Math.round(bearing(b.pos, target));
+  b.pos = destination(b.pos, Math.min(d, speed * (0.85 + Math.random() * 0.3)), (b.hdg * Math.PI) / 180);
+}
+async function startBots(myRole) {
+  stopBots();
+  const z = S.cfg.rules.zone, roles = { ...S.cfg.roles };
+  for (const [name, emoji, role] of BOT_DEFS[myRole] || BOT_DEFS.F) {
+    const id = 'bot' + randStr(8);
+    const b = { id, name, emoji, c: localBroker.client(), pos: destination(z, 30 + Math.random() * 150, Math.random() * 2 * Math.PI), hdg: 0, lastLive: 0, revSent: -1, pings: new Set(), lastShrink: 0, circle: null, track: [], wander: null };
+    bots.push(b);
+    await botPub(b, 'p/' + id, { id, name, emoji, t: tnow() }, true);
+    await botPub(b, 'on/' + id, { on: true, t: tnow(), bat: 40 + Math.round(Math.random() * 60) }, true);
+    roles[id] = role;
+  }
+  await pubCfg({ roles });
+  botTimer = setInterval(() => { botTick().catch(() => {}); }, 1000);
+}
+function stopBots() {
+  if (botTimer) clearInterval(botTimer);
+  botTimer = null;
+  for (const b of bots) { try { b.c.end(); } catch { /* déjà fermé */ } }
+  bots = [];
+}
+const truePos = (id) => (id === S.me ? S.fix : (bots.find((x) => x.id === id) || {}).pos);
+async function botTick() {
+  const c = S.cfg;
+  if (!c || !S.room || c.status === 'lobby') return;
+  const ph = phase(), now = tnow(), out = outcome(), gid = c.gameId;
+  if (out) {
+    for (const b of bots) {
+      if (b.trkSent === gid || !b.track.length) continue;
+      b.trkSent = gid;
+      const st = trackStats(b.track);
+      await botPub(b, 'trk/' + b.id, { gameId: gid, t: now, role: c.roles[b.id], ...st, pts: b.track.map((x) => [Math.round((x[0] - c.startAt) / 1000), Math.round(x[1] * 1e5), Math.round(x[2] * 1e5)]) }, true);
+    }
+    return;
+  }
+  if (c.status !== 'running') return;
+  const z = currentZone() || c.rules.zone;
+  for (const b of bots) {
+    const role = roleOf(b.id);
+    if (role === 'S') continue;
+    const last = b.track[b.track.length - 1];
+    if (!last || now - last[0] > 8000) b.track.push([now, b.pos.lat, b.pos.lng]);
+    if (role === 'H') {
+      if (ph.name === 'head') {
+        if (now - b.lastLive > 5000) { b.lastLive = now; await botPub(b, 'pos/' + b.id, { lat: b.pos.lat, lng: b.pos.lng, acc: 8, hdg: null, spd: 0, t: now, kind: 'live', gameId: gid }, true); }
+        continue;
+      }
+      // Cible : dernière position révélée d'un fugitif ; s'il est tout près, le robot le « voit » et fonce.
+      let target = null, best = Infinity;
+      for (const id of fugitives()) {
+        if (isCaught(id)) continue;
+        const p = S.pos[id];
+        if (p && p.gameId === gid && p.kind !== 'live') { const d = dist(b.pos, p); if (d < best) { best = d; target = p; } }
+        const tp = truePos(id);
+        if (tp && dist(b.pos, tp) < 60) { target = tp; best = 0; }
+      }
+      if (!target || (best > 0 && dist(b.pos, target) < 15)) target = b.wander && dist(b.pos, b.wander) > 15 ? b.wander : (b.wander = randomIn(z));
+      botStep(b, target, 1.8);
+      for (const id of fugitives()) {
+        const tp = truePos(id);
+        if (!isCaught(id) && tp && dist(b.pos, tp) < 12) await botPub(b, 'caught/' + id, { by: b.id, t: now, gameId: gid }, true);
+      }
+      if (now - b.lastLive > 5000) { b.lastLive = now; await botPub(b, 'pos/' + b.id, { lat: b.pos.lat, lng: b.pos.lng, acc: 8, hdg: b.hdg, spd: 1.8, t: now, kind: 'live', gameId: gid }, true); }
+    } else {
+      // Fugitif : fuit le chasseur le plus proche, sinon se promène dans la zone.
+      let threat = null, dmin = Infinity;
+      for (const [id, p] of Object.entries(S.pos)) if (p.kind === 'live' && p.gameId === gid && roleOf(id) === 'H') { const d = dist(b.pos, p); if (d < dmin) { dmin = d; threat = p; } }
+      if (roleOf(S.me) === 'H' && S.fix) { const d = dist(b.pos, S.fix); if (d < dmin) { dmin = d; threat = S.fix; } }
+      let target;
+      if (threat && dmin < 150) {
+        target = destination(b.pos, 60, (bearing(threat, b.pos) * Math.PI) / 180);
+        if (dist(target, z) > z.r * 0.9) target = randomIn(z);
+      } else target = b.wander && dist(b.pos, b.wander) > 15 ? b.wander : (b.wander = randomIn(z));
+      botStep(b, target, ph.name === 'head' ? 2.2 : 1.4);
+      if (ph.name !== 'hunt') continue;
+      const fz = c.rules.fuzzy;
+      const circle = (r, lvl) => {
+        if (!fz) return { lat: b.pos.lat, lng: b.pos.lng, lvl };
+        const cc = destination(b.pos, Math.sqrt(Math.random()) * r * 0.8, Math.random() * 2 * Math.PI);
+        return { lat: cc.lat, lng: cc.lng, r: Math.round(r), lvl };
+      };
+      if (ph.k > b.revSent) {
+        b.revSent = ph.k; b.circle = circle(fz, 1);
+        await botPub(b, 'pos/' + b.id, { ...b.circle, hdg: b.hdg, t: now, kind: 'reveal', idx: ph.k, gameId: gid }, true);
+      }
+      for (const t of pingTimes()) {
+        if (b.pings.has(t) || now - t > 60000) continue;
+        b.pings.add(t); b.circle = circle(fz, 1);
+        await botPub(b, 'pos/' + b.id, { ...b.circle, hdg: b.hdg, t: now, kind: 'ping', pingT: t, gameId: gid }, true);
+      }
+      if (fz && b.circle && b.circle.r > c.rules.fuzzMin && now - b.lastShrink > 30000) {
+        const hunters = [...Object.entries(S.pos).filter(([id, p]) => p.kind === 'live' && p.gameId === gid && roleOf(id) === 'H' && now - p.t < 30000)];
+        if (roleOf(S.me) === 'H' && S.fix) hunters.push([S.me, S.fix]);
+        const intr = hunters.find(([, p]) => dist(p, b.circle) <= b.circle.r);
+        if (intr) {
+          b.lastShrink = now;
+          b.circle = circle(Math.max(c.rules.fuzzMin, (b.circle.r * c.rules.fuzzShrink) / 100), b.circle.lvl + 1);
+          await botPub(b, 'pos/' + b.id, { ...b.circle, hdg: b.hdg, t: now, kind: 'shrink', by: intr[0], gameId: gid }, true);
+        }
+      }
+    }
+  }
+}
+$('#btn-solo').onclick = async () => {
+  if (!needName()) return;
+  const role = await ask('🤖 Partie d’essai', `<p>Tu joues seul contre des robots, sans connexion : parfait pour découvrir l’appli. Ils se déplacent autour de toi (zone de 500 m, partie de 15 min).</p>
+    <div class="pick-list"><button class="btn fug" data-pick="F">🏃 Je suis fugitif</button><button class="btn hunt" data-pick="H">🔦 Je suis chasseur</button></div>`,
+  [{ label: 'Annuler', value: null, cls: 'ghost' }]);
+  if (!role) return;
+  busy('Recherche de ta position…');
+  startGeo();
+  const t0 = Date.now();
+  while (!S.fix && Date.now() - t0 < 12000) await sleep(200);
+  busy(false);
+  if (!S.fix) { toast('Il faut ta position pour la partie d’essai : autorise la localisation.'); return; }
+  const z = { lat: +S.fix.lat.toFixed(6), lng: +S.fix.lng.toFixed(6), r: 500 };
+  const missions = [0, 1, 2].map((i) => {
+    const m = destination(z, 120 + Math.random() * 220, ((i * 2 + Math.random()) * Math.PI) / 3);
+    return { lat: +m.lat.toFixed(6), lng: +m.lng.toFixed(6) };
+  });
+  enterRoom({ code: randStr(6, CODE_ALPHABET), solo: { role, rules: { duration: 15, headStart: 1, interval: 2, pings: 2, fuzzy: 150, shrink: 50, shrinkEvery: 3, zone: z, missions } } });
+};
 
 // Horloge : compte à rebours, obligations (révélations, radars…), rafraîchissement.
 let ticks = 0;
@@ -1829,14 +2382,14 @@ setInterval(() => {
   ticks++;
   if (S.screen === 'game') {
     dutyTick();
-    renderHud(phase(), outcome(), roleOf(S.me), Date.now());
+    renderHud(phase(), outcome(), roleOf(S.me), tnow());
     updateGameZone();
-    if (ticks % 5 === 0 || outcome()) scheduleRender();
+    if (ticks % (ecoOn() ? 10 : 5) === 0 || outcome()) scheduleRender();
   }
 }, 1000);
 
 // Démarrage
-if (qs.get('fast')) window.__traque = { S, zoneState };
+if (qs.get('fast')) window.__traque = { S, zoneState, pubRules, pubCfg, outcome, powersLeft, connCount };
 initHome();
 const h0 = parseHash();
 if (h0.code) $(store.get('traque.name') ? '#btn-join' : '#name').focus();
