@@ -20,7 +20,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="vendor/leaflet.css">
-  <link rel="stylesheet" href="style.css?v=2026-11-18c">
+  <link rel="stylesheet" href="style.css?v=2026-11-18d">
 </head>
 <body>
 
@@ -66,6 +66,7 @@
         <li>Les fugitifs peuvent apparaître dans un <b>cercle</b> plutôt qu'en point exact. Quand un chasseur entre dans ce cercle, il rétrécit autour du fugitif.</li>
         <li>Prison (si l'organisateur en place une) : un fugitif attrapé va en prison ; un fugitif libre qui y entre libère tout le monde.</li>
         <li>Zones interdites ⛔ : y entrer révèle ta position, comme une sortie de zone.</li>
+        <li>Équipes de fugitifs (option) : les coéquipiers se voient en direct et gagnent ensemble si l'un d'eux survit.</li>
         <li>Modes : classique, infection (chaque attrapé devient chasseur), cache-cache (on ne bouge plus après l'avance), capture du drapeau.</li>
         <li>Balises 🎁 : le premier fugitif qui passe dessus gagne un pouvoir.</li>
         <li>Pouvoirs : les fugitifs peuvent <b>brouiller</b> une révélation ou lancer un <b>contre-radar</b> pour voir les chasseurs 30 s, et <b>riposter</b> après un radar.</li>
@@ -161,6 +162,13 @@
             <option value="500">Cercle de 500 m</option><option value="750">Cercle de 750 m</option><option value="1000">Cercle de 1 km</option>
           </select>
         </label>
+        <label class="wide">Équipes de fugitifs
+          <select data-rule="teams">
+            <option value="0">Non, chacun pour soi</option><option value="2">2 équipes (🔴 🟣)</option>
+            <option value="3">3 équipes (🔴 🟣 🟢)</option><option value="4">4 équipes (🔴 🟣 🟢 🟡)</option>
+          </select>
+        </label>
+        <p class="hint rules-note">Équipes : les coéquipiers se voient en direct (positions chiffrées, invisibles pour les chasseurs), ont leur chat privé et ne libèrent que les leurs en prison. Une équipe gagne si au moins un de ses membres survit.</p>
         <label>Cercle trouvé : il devient
           <select data-rule="fuzzShrink">
             <option value="67">2/3 de sa taille</option><option value="50">2 fois plus petit</option><option value="33">3 fois plus petit</option>
@@ -350,6 +358,6 @@
 <script src="vendor/mqtt.min.js"></script>
 <script src="vendor/leaflet.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script type="module" src="app.js?v=2026-11-18c"></script>
+<script type="module" src="app.js?v=2026-11-18d"></script>
 </body>
 </html>

@@ -357,3 +357,11 @@ body.replay .leaflet-overlay-pane path:not(.rp):not(.zp) { display: none; }
 .leaflet-layer.tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88) saturate(.55); }
 .leaflet-container { background: #e9e5dc; }
 body.map-dark .leaflet-container { background: #1f2227; }
+
+/* Équipes de fugitifs */
+.team-chip { appearance: none; border: 2px solid var(--team); background: color-mix(in srgb, var(--team) 14%, var(--surface)); color: var(--text); font: inherit; font-size: .8rem; font-weight: 700; padding: .3rem .55rem; border-radius: 999px; min-height: 34px; cursor: pointer; white-space: nowrap; }
+.team-chip:disabled { cursor: default; opacity: 1; }
+.pin.teamed { box-shadow: 0 0 0 4px var(--team), 0 2px 8px rgba(0,0,0,.35); }
+.team-badge { display: inline-block; font-size: .72rem; font-weight: 700; padding: 0 .4rem; border-radius: 6px; border: 1.5px solid var(--team); color: var(--text); }
+.team-row { border-left: 4px solid var(--team); padding-left: .6rem !important; font-weight: 600; }
+.role-chip.compact { padding: .35rem .5rem; min-width: 38px; }
