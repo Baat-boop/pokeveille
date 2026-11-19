@@ -81,4 +81,4 @@ Publication : `CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_EMAIL=… CLOUDFLARE_API_KEY
 - Partie d'essai solo contre des robots, sans connexion.
 - Les téléphones se parlent d'abord via notre relais Cloudflare (`worker/relay.js` : un Durable Object par partie, effacé après 2 jours d'inactivité), avec les relais MQTT publics gratuits (EMQX, HiveMQ, Mosquitto) en secours, tous utilisés en même temps : si l'un tombe, la partie continue.
 - Mode test (case dans les règles) : tout le monde voit tout, onglet de diagnostic (relais, GPS, batterie, horloge, versions), boutons pour avancer le temps, pas de points. Tout est chiffré avec le code de la partie ; les fugitifs n'envoient jamais leur position en continu.
-- Garder la page ouverte pendant la partie (l'écran reste allumé tout seul). Pour être prévenu appli fermée : rappels via l'appli gratuite ntfy.
+- Garder la page ouverte pendant la partie (l'écran reste allumé tout seul). Notifications automatiques, même appli fermée, sans appli tierce : Web Push envoyé par notre Worker (`worker/push.js`, clé privée dans le secret Cloudflare `VAPID_PRIVATE_JWK`). Sur iPhone, il faut ajouter Traque à l'écran d'accueil.

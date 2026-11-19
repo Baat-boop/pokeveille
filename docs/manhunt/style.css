@@ -378,3 +378,4 @@ body.map-dark .leaflet-container { background: #1f2227; }
 .test-table tr.stale td { opacity: .55; }
 .test-table td.warn { color: var(--fug); font-weight: 700; }
 .test-body pre { font-size: .7rem; max-height: 240px; overflow: auto; background: var(--surface-2); padding: .5rem; border-radius: 8px; }
+.push-on { font-weight: 700; color: var(--ok); align-self: center; }

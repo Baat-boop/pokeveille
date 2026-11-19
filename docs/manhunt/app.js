@@ -240,6 +240,7 @@ function relayClient(base, will) {
       ws.send(JSON.stringify({ t: 'pub', topic: topic.slice(prefix.length), payload: String(payload), retain: !!o.retain }));
     },
     end() { closed = true; clearInterval(pingT); c.connected = false; try { ws.close(1000); } catch { /* déjà fermé */ } },
+    raw(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); },
   };
   const open = () => {
     try { ws = new WebSocket(base + S.room.id); } catch { return; }
@@ -417,7 +418,7 @@ async function enterRoom({ code, create = false, solo = null }) {
     S.clients = urls.map((u) => mkClient(u, will));
     S.clients.forEach((c, i) => {
       c.on('message', (t, pl) => onMessage(t, pl, i));
-      c.on('connect', () => { c.subscribe(NS + S.room.id + '/#', { qos: 1 }); pubPresence(true); scheduleRender(); });
+      c.on('connect', () => { c.subscribe(NS + S.room.id + '/#', { qos: 1 }); pubPresence(true); if (c.raw) registerPush(); scheduleRender(); });
       c.on('close', scheduleRender);
       c.on('offline', scheduleRender);
       c.on('error', () => { /* mqtt.js réessaie tout seul */ });
@@ -449,6 +450,7 @@ async function enterRoom({ code, create = false, solo = null }) {
     }
     startGeo();
     initBattery();
+    initPush();
     if (solo) startBots(solo.role);
     route();
   } catch (e) {
@@ -487,6 +489,7 @@ const avatarOf = (id) => (S.players[id] && S.players[id].emoji) || '';
 
 async function leaveRoom(removeMe = true) {
   stopBots();
+  if (S.pushSub) relaySend({ t: 'sched', id: S.me, items: [] });
   if (S.clients.length) {
     if (removeMe) {
       await pub('on/' + S.me, null, { retain: true });
@@ -851,6 +854,7 @@ async function dutyTick() {
     if (c.status === 'running' && out) {
       if (isHost()) {
         await pubCfg({ status: 'ended', winner: out.winner, endReason: out.reason, endedAt: out.at, endBy: out.by || null, ...scoreUpdate(out) });
+        pushTo(everyone(), '🏁 Partie terminée', out.winner === 'F' ? 'Victoire des fugitifs ! Ouvre Traque pour le récap.' : 'Victoire des chasseurs ! Ouvre Traque pour le récap.', 'end');
       }
       if (baseRole(S.me) === 'F' && !isCaught(S.me) && !S.finalSent && S.fix) {
         S.finalSent = true; await publishPos('final');
@@ -899,8 +903,6 @@ async function dutyTick() {
       await publishMate(now);
     }
 
-    // Rappels appli fermée (ntfy), programmés une fois par partie
-    if (role === 'F') scheduleReminders();
 
     if (role === 'F') {
       if (ph.name === 'hunt') {
@@ -975,6 +977,7 @@ async function dutyTick() {
         if (prisoners.length) {
           S.lastFree = now;
           for (const id of prisoners) await pub('caught/' + id, { freed: true, by: S.me, t: now, gameId: gid }, { retain: true });
+          pushTo(prisoners, '🔓 Tu es libre !', `${S.name} t’a libéré·e de prison : cours !`, 'free');
           beep('good'); toast(`🔓 Tu as libéré ${prisoners.map(nameOf).join(', ')} !`, 4500);
         }
       }
@@ -1068,12 +1071,14 @@ async function startGame() {
     `${nF} fugitif${nF > 1 ? 's' : ''} contre ${nH} chasseur${nH > 1 ? 's' : ''}. ${minutesLabel(r.headStart)} d'avance, révélation toutes les ${minutesLabel(r.interval)}, ${minutesLabel(r.duration)} au total.${r.prison ? ' Prison active : les fugitifs attrapés peuvent être libérés.' : ''}${r.anon ? ' Mode anonyme.' : ''}${r.zone ? (r.shrink > 0 ? ' La zone rétrécit au fil du temps.' : '') : ' Aucune zone de jeu définie.'}${r.fuzzy > 0 ? ` Les fugitifs apparaissent dans un cercle de ${fmtDist(r.fuzzy)}.` : ''}`,
     'C’est parti !');
   if (!ok) return;
+  pushTo(everyone(), '🚦 C’est parti !', `La partie commence : les fugitifs ont ${minutesLabel(r.headStart)} d’avance. Ouvre Traque.`, 'start');
   await pubCfg({ status: 'running', startAt: tnow(), gameId: randStr(8), roles, winner: null, endReason: null, endedAt: null });
 }
 async function catchSelf() {
   const ok = await confirmBox('Tu t’es fait attraper ?', 'Tout le monde sera prévenu.', 'Oui, attrapé·e', 'fug');
   if (!ok) return;
   await pub('caught/' + S.me, { by: null, t: tnow(), gameId: S.cfg.gameId }, { retain: true });
+  pushTo(everyone(), '🎯 Capture !', `${S.name} s’est fait attraper.`, 'catch');
 }
 async function catchSomeone() {
   const free = fugitives().filter((id) => !isCaught(id));
@@ -1083,6 +1088,7 @@ async function catchSomeone() {
   const id = await ask('J’ai attrapé…', body, [{ label: 'Annuler', value: null, cls: 'ghost' }]);
   if (!id) return;
   await pub('caught/' + id, { by: S.me, t: tnow(), gameId: S.cfg.gameId }, { retain: true });
+  pushTo(everyone(), '🎯 Capture !', `${nameOf(id)} s’est fait attraper par ${S.name}.`, 'catch');
 }
 async function usePing() {
   const used = pingTimes().length, left = S.cfg.rules.pings - used;
@@ -1093,6 +1099,7 @@ async function usePing() {
   const next = { gameId: S.cfg.gameId, list: [...mine, tnow()] };
   S.pings[S.me] = next;
   await pub('pings/' + S.me, next, { retain: true });
+  pushTo(fugitives().filter((id) => !isCaught(id)), '📡 Radar !', 'Les chasseurs lancent un radar : ouvre Traque tout de suite pour envoyer ta position.', 'radar');
   addLog('pinguse:' + S.me + ':' + next.list.at(-1), next.list.at(-1), `📡 <b>${esc(S.name)}</b> lance un radar.`);
   scheduleRender();
 }
@@ -1517,79 +1524,135 @@ function notify(title, body) {
   } catch { /* pas de notification */ }
 }
 
-/* ---------- rappels appli fermée (ntfy.sh) ---------- */
-function ntfyCfg() {
-  let n = store.get('traque.ntfy');
-  if (!n || !n.topic) { n = { topic: 'traque-' + randStr(14), on: false }; store.set('traque.ntfy', n); }
-  return n;
+/* ---------- notifications automatiques (Web Push, sans appli tierce) ----------
+ * Le téléphone s'abonne aux notifications du navigateur avec la clé publique de notre relais Cloudflare.
+ * Chaque joueur envoie au relais ses rappels (révélation, zone, fin…) : le relais les déclenche à l'heure,
+ * même appli fermée. Les événements (début, radar, capture…) sont envoyés par le joueur qui les provoque.
+ * Sur iPhone, Apple ne les autorise que si Traque est ajouté à l'écran d'accueil. */
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+const PUSH_KEY_URL = OUR_RELAY ? OUR_RELAY.replace(/^ws/, 'http').replace(/\/relay\/$/, '/push-key') : null;
+const LEAD = Math.min(60000, MIN); // rappels 1 min avant
+function relaySend(obj) {
+  for (const c of S.clients) if (c.raw && c.connected) c.raw(obj);
 }
-async function ntfySend(topic, title, msg, at) {
-  const u = new URL('https://ntfy.sh/' + encodeURIComponent(topic));
-  u.searchParams.set('title', title);
-  u.searchParams.set('tags', 'round_pushpin');
-  u.searchParams.set('priority', 'high');
-  u.searchParams.set('click', location.origin + location.pathname);
-  if (at) u.searchParams.set('at', String(Math.floor(at / 1000)));
-  const res = await fetch(u, { method: 'POST', body: msg });
-  if (!res.ok) throw new Error('ntfy ' + res.status);
+const urlB64ToBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+async function pushKey() {
+  if (S.pushKey) return S.pushKey;
+  const res = await fetch(PUSH_KEY_URL, { cache: 'no-store' });
+  if (!res.ok) throw new Error('clé indisponible');
+  S.pushKey = (await res.text()).trim();
+  return S.pushKey;
 }
-/** Programme chez ntfy un rappel 1 min avant chaque révélation de la partie (une seule fois). */
-async function scheduleReminders() {
-  const n = store.get('traque.ntfy');
-  if (!n || !n.on || S.solo || !S.cfg || S.cfg.status !== 'running' || isCaught(S.me)) return;
-  const key = 'traque.ntfy.done.' + S.cfg.gameId;
-  if (store.get(key) || S.remindersBusy) return;
-  S.remindersBusy = true; store.set(key, true);
+/** Abonne ce téléphone (à appeler sur un geste du joueur la première fois). */
+async function enablePush() {
+  if (!pushSupported() || !PUSH_KEY_URL) throw new Error('unsupported');
+  if (Notification.permission !== 'granted' && (await Notification.requestPermission()) !== 'granted') throw new Error('denied');
+  const reg = await navigator.serviceWorker.ready;
+  const key = await pushKey();
+  let sub = await reg.pushManager.getSubscription();
+  if (sub && sub.options && sub.options.applicationServerKey) {
+    const cur = new Uint8Array(sub.options.applicationServerKey);
+    const want = urlB64ToBytes(key);
+    if (cur.length !== want.length || cur.some((b, i) => b !== want[i])) { await sub.unsubscribe(); sub = null; }
+  }
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToBytes(key) });
+  S.pushSub = sub.toJSON();
+  store.set('traque.push', true);
+  return S.pushSub;
+}
+/** Au retour dans une partie : reprend l'abonnement sans rien demander. */
+async function initPush() {
   try {
-    const r = S.cfg.rules, release = S.cfg.startAt + r.headStart * MIN, end = S.cfg.startAt + r.duration * MIN;
-    let count = 0;
-    for (let t = release; t < end && count < 40; t += r.interval * MIN) {
-      const at = t - 60000;
-      if (at - tnow() < 20000) continue;
-      await ntfySend(n.topic, '📍 Révélation dans 1 min', 'Ouvre Traque pour envoyer ta position.', at);
-      count++;
-    }
-    if (count) addLog('ntfy:' + S.cfg.gameId, tnow(), `🔔 ${count} rappel${count > 1 ? 's' : ''} programmé${count > 1 ? 's' : ''} sur ton téléphone.`);
-  } catch {
-    store.del(key);
-    toast('🔔 Impossible de programmer les rappels (ntfy injoignable).');
-  } finally { S.remindersBusy = false; }
+    if (!store.get('traque.push') || !pushSupported() || Notification.permission !== 'granted') return;
+    await enablePush();
+    registerPush();
+  } catch { /* on réessaiera via le bouton */ }
 }
-function openReminders() {
-  const n = ntfyCfg();
-  const perm = 'Notification' in window ? Notification.permission : 'unsupported';
-  const body = `
-    <p>Une page web fermée ne peut pas se réveiller toute seule. Pour être prévenu <b>1 min avant chaque révélation</b>, même appli fermée et téléphone verrouillé :</p>
-    <ol class="steps">
-      <li>Installe l'appli gratuite <b>ntfy</b> (Play Store ou App Store).</li>
-      <li>Dans ntfy, appuie sur <b>+</b> et abonne-toi à ce sujet :<br><code class="topic">${esc(n.topic)}</code> <button class="btn small" data-ntfy="copy">Copier</button></li>
-      <li>Active les rappels ici, puis envoie un test.</li>
-    </ol>
-    <label class="check rem-toggle"><input type="checkbox" data-ntfy="on" ${n.on ? 'checked' : ''}> Rappels activés (quand je suis fugitif)</label>
-    <div class="rem-actions">
-      <button class="btn small" data-ntfy="test">Envoyer un test</button>
-      ${perm === 'default' ? '<button class="btn small" data-ntfy="perm">Autoriser les notifications de la page</button>' : ''}
-    </div>
-    <p class="hint">Le sujet est secret et propre à ton téléphone. Les rappels passent par ntfy.sh (gratuit, sans compte) et ne contiennent ni ton nom ni ta position. Ils sont programmés au lancement de la partie : si elle s'arrête plus tôt, les rappels restants arrivent quand même.</p>`;
-  ask('🔔 Rappels appli fermée', body, [{ label: 'Fermer', value: null, cls: 'primary' }]);
+function registerPush(test = false) {
+  if (!S.pushSub || !S.me || !S.room) return;
+  relaySend({ t: 'sub', id: S.me, sub: S.pushSub, test });
+  S.lastSchedKey = null; // renvoyer les rappels (le relais a pu redémarrer)
+}
+async function disablePush() {
+  relaySend({ t: 'sub', id: S.me, sub: null });
+  relaySend({ t: 'sched', id: S.me, items: [] });
+  try { const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription(); if (sub) await sub.unsubscribe(); } catch { /* déjà fait */ }
+  S.pushSub = null;
+  store.set('traque.push', false);
+}
+/** Rappels de ce joueur pour la partie en cours (vide hors partie : annule les rappels restants). */
+function computeSchedule() {
+  const c = S.cfg;
+  if (!c || c.status !== 'running' || outcome() || S.solo) return [];
+  const r = c.rules, release = c.startAt + r.headStart * MIN, end = c.startAt + r.duration * MIN, now = tnow();
+  const role = roleOf(S.me), free = baseRole(S.me) === 'F' && !isCaught(S.me);
+  if (role === 'S' && !free) return [];
+  const items = [];
+  // Liste complète de la partie (pas filtrée sur l'heure) : elle ne change que si la partie change.
+  const add = (at, title, body, tag) => { if (at > c.startAt && at < end) items.push({ at: Math.round(at), title, body, tag }); };
+  void now;
+  if (free) {
+    for (let t = release, k = 0; t < end; t += r.interval * MIN, k++) {
+      if (!jammed(S.me, k)) add(t - LEAD, '📍 Révélation dans 1 min', 'Ouvre Traque pour envoyer ta position aux chasseurs.', 'reveal');
+    }
+  }
+  if (role === 'H' && r.headStart >= 1) add(release, '🔓 Les chasseurs sont lâchés !', 'La chasse commence : ouvre Traque.', 'release');
+  const sc = zoneSchedule();
+  if (sc && sc.n) for (let i = 0; i < sc.n; i++) add(sc.release + (i + SHRINK_HOLD) * sc.step - LEAD, '⭕ La zone rétrécit dans 1 min', 'Vérifie que tu seras dans la prochaine zone.', 'zone');
+  if (r.duration > 10) add(end - 5 * MIN, '⏱️ Plus que 5 minutes !', 'Dernière ligne droite.', 'end5');
+  return items;
+}
+function pushSchedule() {
+  if (!S.pushSub || !S.room) return;
+  const items = computeSchedule();
+  const key = (S.cfg && S.cfg.gameId) + ':' + JSON.stringify(items.map((x) => [x.at, x.tag]));
+  if (key === S.lastSchedKey) return;
+  S.lastSchedKey = key;
+  // On n'envoie que les rappels encore à venir (un rappel déjà passé ne doit pas repartir).
+  const now = tnow();
+  relaySend({ t: 'sched', id: S.me, items: items.filter((x) => x.at > now + 1500).slice(0, 80) });
+}
+/** Notification d'événement aux autres joueurs listés (seulement ceux qui ont activé les notifications la reçoivent). */
+function pushTo(ids, title, body, tag) {
+  const to = ids.filter((id) => id !== S.me && !String(id).startsWith('bot'));
+  if (to.length) relaySend({ t: 'push', to, title, body, tag });
+}
+const everyone = () => Object.keys(S.players);
+function openNotifications() {
+  let body;
+  if (!pushSupported() || !PUSH_KEY_URL) {
+    body = isIOS && !standalone()
+      ? `<p>Sur iPhone, Apple n'autorise les notifications que si Traque est installé sur l'écran d'accueil :</p>
+         <ol class="steps"><li>Dans Safari, touche le bouton <b>Partager</b> (carré avec une flèche).</li><li>Choisis <b>Sur l'écran d'accueil</b>.</li><li>Ouvre Traque depuis la nouvelle icône, rejoins la partie et reviens ici.</li></ol>`
+      : '<p>Ce navigateur ne gère pas les notifications. Utilise Chrome sur Android, ou Safari sur iPhone (depuis l’écran d’accueil).</p>';
+  } else if (Notification.permission === 'denied') {
+    body = '<p>Les notifications sont bloquées pour Traque. Autorise-les dans les réglages du navigateur (cadenas à côté de l’adresse › Notifications), puis reviens ici.</p>';
+  } else {
+    body = `<p>Reçois les infos importantes <b>même quand Traque est fermé</b> :</p>
+      <ul class="steps"><li>📍 1 min avant chacune de tes révélations</li><li>📡 quand un radar est lancé</li><li>⭕ avant chaque rétrécissement de la zone</li><li>🎯 captures, 🔓 libérations, 🚦 début et 🏁 fin de partie</li></ul>
+      <p class="hint">Aucune appli à installer. Les rappels sont annulés si la partie s'arrête plus tôt.</p>
+      <div class="rem-actions">${S.pushSub
+        ? '<span class="push-on">✅ Activées sur ce téléphone</span><button class="btn small" data-push="test">Envoyer un test</button><button class="btn small ghost" data-push="off">Désactiver</button>'
+        : '<button class="btn primary" data-push="on">🔔 Activer les notifications</button>'}</div>`;
+  }
+  ask('🔔 Notifications', body, [{ label: 'Fermer', value: null, cls: 'ghost' }]);
 }
 document.addEventListener('click', async (e) => {
-  const b = e.target.closest('[data-ntfy]');
-  if (!b || b.type === 'checkbox') return;
-  const n = ntfyCfg(), act = b.dataset.ntfy;
-  if (act === 'copy') { try { await navigator.clipboard.writeText(n.topic); toast('Sujet copié !'); } catch { prompt('Copie ce sujet :', n.topic); } }
-  else if (act === 'test') {
-    try { await ntfySend(n.topic, '✅ Test Traque', 'Les rappels marchent !'); toast('Test envoyé : regarde l’appli ntfy.'); } catch { toast('Envoi impossible : vérifie ta connexion.'); }
-  } else if (act === 'perm') {
-    try { await Notification.requestPermission(); b.remove(); } catch { /* refus */ }
-  }
-});
-document.addEventListener('change', (e) => {
-  const b = e.target.closest('[data-ntfy="on"]');
+  const b = e.target.closest('[data-push]');
   if (!b) return;
-  const n = ntfyCfg(); n.on = b.checked; store.set('traque.ntfy', n);
-  if (n.on && S.cfg && S.cfg.status === 'running' && roleOf(S.me) === 'F') scheduleReminders();
-  toast(n.on ? '🔔 Rappels activés' : 'Rappels désactivés');
+  const act = b.dataset.push;
+  try {
+    if (act === 'on') { b.disabled = true; await enablePush(); registerPush(true); toast('🔔 Notifications activées : un test arrive.'); }
+    else if (act === 'test') { registerPush(true); toast('Test envoyé.'); }
+    else if (act === 'off') { await disablePush(); toast('Notifications désactivées.'); }
+  } catch (err) {
+    toast(err.message === 'denied' ? 'Notifications refusées : autorise-les dans les réglages du navigateur.' : 'Impossible d’activer les notifications sur ce navigateur.');
+  }
+  $('#modal').hidden = true;
+  setTimeout(openNotifications, 150);
+  scheduleRender();
 });
 
 async function shareLink() {
@@ -1997,6 +2060,10 @@ function renderLobby() {
   $('#btn-flag-clear').hidden = !r0.flag;
   $('#mode-hint').textContent = MODE_HINT[r0.mode] || '';
   renderScores();
+  const nb = $('#btn-notifs');
+  const nbTxt = S.pushSub ? '🔔 Notifications activées ✓' : '🔔 Activer les notifications';
+  if (nb.textContent !== nbTxt) nb.textContent = nbTxt;
+  nb.classList.toggle('primary', !S.pushSub);
   renderSavedZones();
   renderLobbyMap();
 
@@ -2106,7 +2173,7 @@ function renderGame() {
   } else if (!S.online[c.host]) tools = '<button class="btn small ghost" data-act="become-host">L’organisateur est hors ligne : prendre le relais</button>';
   tools += `<button class="btn small ghost" data-act="alert">${ALERT_LABEL[store.get('traque.alert') || 'auto']}</button>`
     + `<button class="btn small ghost" data-act="eco">${ecoOn() ? '🔋 Éco : oui' : '🔋 Éco : non'}</button>`
-    + (S.solo ? '' : '<button class="btn small ghost" data-act="reminders">⏰ Rappels</button>')
+    + (S.solo ? '' : `<button class="btn small ghost" data-act="reminders">${S.pushSub ? '🔔 Notifs : oui' : '🔕 Notifs : non'}</button>`)
     + '<button class="btn small ghost" data-act="leave">Quitter</button>';
   const ht = $('#host-tools');
   if (ht.dataset.html !== tools) { ht.dataset.html = tools; ht.innerHTML = tools; }
@@ -2411,7 +2478,7 @@ document.addEventListener('click', async (e) => {
       scheduleRender();
     }
     else if (act === 'gps') openGpsHelp();
-    else if (act === 'reminders') openReminders();
+    else if (act === 'reminders') openNotifications();
     else if (act === 'see-map') { S.endDismissed = true; scheduleRender(); }
     else if (act === 'lobby') pubCfg({ status: 'lobby' });
     else if (act === 'leave') { if (await confirmBox('Quitter la partie ?', 'Tu pourras revenir avec le même code.', 'Quitter', 'danger')) leaveRoom(); }
@@ -2420,6 +2487,7 @@ document.addEventListener('click', async (e) => {
       if (await confirmBox('Terminer la partie ?', 'Les fugitifs encore en fuite gagnent.', 'Terminer', 'danger')) {
         const at = tnow();
         pubCfg({ status: 'ended', winner: 'F', endReason: 'host', endedAt: at, ...scoreUpdate({ winner: 'F', reason: 'host', at }) });
+        pushTo(everyone(), '🏁 Partie terminée', 'L’organisateur a arrêté la partie. Ouvre Traque pour le récap.', 'end');
       }
     }
     return;
@@ -2722,6 +2790,7 @@ setInterval(() => {
   if (!S.room || !S.cfg) return;
   ticks++;
   if (testOn()) publishDebug();
+  pushSchedule(); // ne renvoie la liste que si la partie a changé
   if (S.screen === 'game') {
     dutyTick();
     renderHud(phase(), outcome(), roleOf(S.me), tnow());
@@ -2734,7 +2803,7 @@ setInterval(() => {
  * GitHub Pages laisse les navigateurs garder les fichiers jusqu'à 10 min. Au démarrage (et au retour sur la page),
  * on compare la version chargée à celle du site ; si elle est plus récente, on recharge sans cache.
  * À chaque modification de l'appli : changer APP_VERSION, version.txt et les ?v= de index.html. */
-const APP_VERSION = '2026-11-18g';
+const APP_VERSION = '2026-11-19a';
 async function checkUpdate() {
   try {
     if (S.screen === 'game' && S.cfg && S.cfg.status === 'running') return; // jamais en pleine partie
@@ -2752,7 +2821,7 @@ checkUpdate();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
 
 // Démarrage
-if (qs.get('fast')) window.__traque = { RELAYS, S, zoneState, pubRules, pubCfg, outcome, powersLeft, connCount, teamOf, mateLive };
+if (qs.get('fast')) window.__traque = { registerPush, computeSchedule, RELAYS, S, zoneState, pubRules, pubCfg, outcome, powersLeft, connCount, teamOf, mateLive };
 initHome();
 const h0 = parseHash();
 if (h0.code) $(store.get('traque.name') ? '#btn-join' : '#name').focus();

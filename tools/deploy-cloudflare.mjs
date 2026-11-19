@@ -10,6 +10,8 @@
  * Publier :
  *   CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_EMAIL=… [CLOUDFLARE_API_KEY=…] node tools/deploy-cloudflare.mjs
  *   (dans une session Claude Code, la clé est ajoutée par le proxy : CLOUDFLARE_API_KEY peut rester vide)
+ * Clé des notifications : secret Cloudflare VAPID_PRIVATE_JWK (clé privée ECDSA P-256 au format JWK), créé une
+ * fois avec l'API « secrets » du Worker ; il n'est jamais dans le dépôt et reste en place à chaque publication.
  * Tester en local (wrangler dev) :
  *   node tools/deploy-cloudflare.mjs --local <dossier>   puis   npx wrangler dev   dans ce dossier
  */
@@ -20,6 +22,7 @@ import { execFileSync } from 'node:child_process';
 
 const ROOT = new URL('../docs/manhunt/', import.meta.url).pathname;
 const RELAY = new URL('../worker/relay.js', import.meta.url).pathname;
+const PUSH = new URL('../worker/push.js', import.meta.url).pathname;
 const NAME = process.env.WORKER_NAME || 'traque';
 const LOCAL = process.argv[2] === '--local' ? process.argv[3] : null;
 const COMPAT = '2025-06-01';
@@ -43,7 +46,7 @@ function walk(dir) {
 }
 const files = walk(ROOT).filter((p) => TYPES[extname(p)]);
 
-const worker = `import { Room, handleRelay } from './relay.js';
+const worker = `import { Room, handleRelay, pushKey } from './relay.js';
 ${files.map((_, i) => `import m${i} from './assets/${i}.bin';`).join('\n')}
 export { Room };
 
@@ -60,6 +63,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/relay/')) return handleRelay(request, env);
+    if (url.pathname === '/push-key') return pushKey(env);
     let path = decodeURIComponent(url.pathname);
     if (path.endsWith('/')) path += 'index.html';
     const f = FILES[path] || FILES[path + '/index.html'];
@@ -74,6 +78,9 @@ if (LOCAL) {
   mkdirSync(join(LOCAL, 'assets'), { recursive: true });
   files.forEach((abs, i) => copyFileSync(abs, join(LOCAL, 'assets', `${i}.bin`)));
   copyFileSync(RELAY, join(LOCAL, 'relay.js'));
+  copyFileSync(PUSH, join(LOCAL, 'push.js'));
+  // Clé de notifications de test (jamais la vraie) : VAPID_TEST_JWK=… node tools/deploy-cloudflare.mjs --local …
+  if (process.env.VAPID_TEST_JWK) writeFileSync(join(LOCAL, '.dev.vars'), `VAPID_PRIVATE_JWK='${process.env.VAPID_TEST_JWK.trim()}'\n`);
   writeFileSync(join(LOCAL, 'worker.js'), worker);
   writeFileSync(join(LOCAL, 'wrangler.toml'), `name = "${NAME}"
 main = "worker.js"
@@ -116,6 +123,8 @@ const metadata = {
   main_module: 'worker.js',
   compatibility_date: COMPAT,
   bindings: [{ type: 'durable_object_namespace', name: 'ROOMS', class_name: 'Room' }],
+  // Garde le secret VAPID_PRIVATE_JWK (clé privée des notifications), enregistré une fois à part.
+  keep_bindings: ['secret_text'],
 };
 if (!declared) metadata.migrations = { new_tag: 'v1', new_sqlite_classes: ['Room'] };
 
@@ -124,11 +133,12 @@ writeFileSync(join(tmp, 'worker.js'), worker);
 writeFileSync(join(tmp, 'metadata.json'), JSON.stringify(metadata));
 const parts = files.flatMap((abs, i) => ['-F', `assets/${i}.bin=@${abs};filename=assets/${i}.bin;type=application/octet-stream`]);
 
-console.log(`Envoi de ${files.length} fichiers + le relais dans le Worker « ${NAME} »…`);
+console.log(`Envoi de ${files.length} fichiers + le relais et les notifications dans le Worker « ${NAME} »…`);
 call(['-X', 'PUT', `${API}/scripts/${NAME}`,
   '-F', `metadata=@${join(tmp, 'metadata.json')};type=application/json`,
   '-F', `worker.js=@${join(tmp, 'worker.js')};filename=worker.js;type=application/javascript+module`,
   '-F', `relay.js=@${RELAY};filename=relay.js;type=application/javascript+module`,
+  '-F', `push.js=@${PUSH};filename=push.js;type=application/javascript+module`,
   ...parts]);
 call(['-X', 'POST', `${API}/scripts/${NAME}/subdomain`, '-H', 'Content-Type: application/json', '-d', '{"enabled":true,"previews_enabled":false}']);
 const sub = call([`${API}/subdomain`]).subdomain;

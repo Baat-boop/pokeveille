@@ -20,7 +20,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="vendor/leaflet.css">
-  <link rel="stylesheet" href="style.css?v=2026-11-18g">
+  <link rel="stylesheet" href="style.css?v=2026-11-19a">
 </head>
 <body>
 
@@ -72,7 +72,7 @@
         <li>Pouvoirs : les fugitifs peuvent <b>brouiller</b> une révélation ou lancer un <b>contre-radar</b> pour voir les chasseurs 30 s, et <b>riposter</b> après un radar.</li>
         <li>Les fugitifs gagnent s'il en reste au moins un à la fin du temps. Sinon, victoire des chasseurs.</li>
       </ol>
-      <p class="hint">Garde l'appli ouverte pendant la partie : l'écran reste allumé tout seul, et ta position ne peut être envoyée que si la page est ouverte.</p>
+      <p class="hint">Garde l'appli ouverte pendant la partie : l'écran reste allumé tout seul, et ta position ne peut être envoyée que si la page est ouverte. Active les notifications pour être prévenu quand il faut la rouvrir.</p>
     </details>
   </div>
 </section>
@@ -235,9 +235,9 @@
     </div>
 
     <div class="card">
-      <h2>Rappels appli fermée</h2>
-      <p class="hint">Un rappel sur ton téléphone 1 min avant chaque révélation, même quand l'appli est fermée (avec l'appli gratuite ntfy).</p>
-      <button class="btn" data-act="reminders" style="margin-top:.6rem">🔔 Configurer les rappels</button>
+      <h2>Notifications</h2>
+      <p class="hint">Sois prévenu même quand Traque est fermé : avant chaque révélation, radar, captures, début et fin de partie. Aucune appli à installer.</p>
+      <button class="btn primary" id="btn-notifs" data-act="reminders" style="margin-top:.6rem">🔔 Activer les notifications</button>
     </div>
 
     <div class="card">
@@ -361,6 +361,6 @@
 <script src="vendor/mqtt.min.js"></script>
 <script src="vendor/leaflet.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script type="module" src="app.js?v=2026-11-18g"></script>
+<script type="module" src="app.js?v=2026-11-19a"></script>
 </body>
 </html>
