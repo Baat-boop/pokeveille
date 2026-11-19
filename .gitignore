@@ -2,3 +2,4 @@ node_modules/
 .data/
 .data-local/
 .gtfs/
+makemore-bot/makemore_config.json
